@@ -1,6 +1,5 @@
-import type { ScanResult } from './scannerService';
 import { collectDeviceSnapshot } from './deviceInfo';
-import type { CaptureSide, GeoLocationData } from '../types/capture';
+import type { CaptureMap, GeoLocationData } from '../types/capture';
 import type {
   DocumentoLabel,
   GpsData,
@@ -70,7 +69,7 @@ export interface BuildPayloadInput {
   documento: DocumentoLabel;
   /** null mientras la geolocalización siga desactivada. */
   geo: GeoLocationData | null;
-  capturas: Partial<Record<CaptureSide, ScanResult>>;
+  capturas: CaptureMap;
 }
 
 export const buildVerificationPayload = async ({

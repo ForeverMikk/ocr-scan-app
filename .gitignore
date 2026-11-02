@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
 
 # Calibración del detector: salidas generadas y fotos con datos personales reales
 dev-fixtures/out

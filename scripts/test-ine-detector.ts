@@ -21,20 +21,19 @@ import {
   findCardCandidates,
   INE_ANALYSIS_WIDTH as ANALYSIS_WIDTH,
   INE_ASPECT,
+  INE_DETECTION_PAD_RATIO as PAD_RATIO,
   INE_MESSAGES,
   selectBestCard,
   type Cv,
   type CvMat,
   type IneSide,
-} from '../src/services/ineCardDetector.ts';
+} from '../src/vision/ine/ineCardDetector.ts';
+import type { Rect } from '../src/types/geometry.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = join(root, 'dev-fixtures', 'ine');
 const outDir = join(root, 'dev-fixtures', 'out');
 mkdirSync(outDir, { recursive: true });
-
-/** Mismo margen que usa la app alrededor del marco (INE_DETECTION_PAD_RATIO). */
-const PAD_RATIO = 0.15;
 
 // ---------------------------------------------------------------------------
 // OpenCV en Node: el objeto `cv` tiene su propio `then`, nunca se resuelve en una Promise
@@ -75,13 +74,6 @@ const writePng = (mat: CvMat, name: string): void => {
 // ---------------------------------------------------------------------------
 // Escenas
 // ---------------------------------------------------------------------------
-
-interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 /** Pega la tarjeta (con perspectiva opcional) sobre un fondo liso. */
 const composeScene = (

@@ -5,8 +5,7 @@
  * junto con las capturas, la ubicación, el dispositivo y la telemetría.
  */
 
-import type { ScanResult } from '../services/scannerService';
-import type { CaptureSide } from './capture';
+import type { CaptureMap } from './capture';
 
 export type DocumentoLabel = 'INE' | 'Factura' | 'Comprobante';
 
@@ -99,7 +98,7 @@ interface VerificationDataBase {
   telemetria: TelemetriaData;
   localidad: string;
   /** Imágenes confirmadas por el usuario (no viene en la referencia; las necesita el OCR). */
-  capturas: Partial<Record<CaptureSide, ScanResult>>;
+  capturas: CaptureMap;
 }
 
 /** INE: incluye todos los campos de OCR. */

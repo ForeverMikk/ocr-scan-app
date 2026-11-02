@@ -1,3 +1,4 @@
+import { canvasToJpeg, loadImage } from '../../shared/image';
 import { mapGuideFrameToSource } from './guideFrameGeometry';
 
 /**
@@ -25,13 +26,5 @@ export const cropDataUrlToGuideFrame = async (
   if (!ctx) return dataUrl;
 
   ctx.drawImage(img, x, y, width, height, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/jpeg', 0.92);
+  return canvasToJpeg(canvas);
 };
-
-const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = (err) => reject(err);
-    img.src = dataUrl;
-  });

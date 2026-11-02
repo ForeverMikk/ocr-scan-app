@@ -1,9 +1,4 @@
-export interface Rect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { Rect } from '../../types/geometry';
 
 export interface GuideFrameMapping {
   /** Región a recortar de la fuente (marco + margen), en píxeles de la fuente. */

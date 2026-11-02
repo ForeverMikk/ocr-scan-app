@@ -7,8 +7,7 @@ import { ensureOpenCvLoaded } from './opencvLoader';
  * Depende del global `cv`, por eso primero se asegura OpenCV.
  */
 
-export type JScanifyClass = typeof import('jscanify').default;
-export type JScanifyInstance = InstanceType<JScanifyClass>;
+type JScanifyClass = typeof import('jscanify').default;
 
 let loadingPromise: Promise<JScanifyClass> | null = null;
 

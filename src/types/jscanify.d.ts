@@ -1,35 +1,13 @@
+/** Tipos mínimos de jscanify (solo lo que usa la app). */
 declare module 'jscanify' {
   export default class JScanify {
     constructor();
-    highlightPaper(
-      image: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement,
-      options?: { color?: string; thickness?: number }
-    ): HTMLCanvasElement;
 
-    /** Detecta el contorno del documento. Requiere `cv.imread(image)` como entrada. */
-    findPaperContour(img: unknown): unknown;
-
+    /** Detecta la hoja, corrige la perspectiva y la devuelve en un canvas del tamaño pedido. */
     extractPaper(
-      image: HTMLImageElement | HTMLCanvasElement | HTMLVideoElement,
+      image: HTMLImageElement | HTMLCanvasElement,
       resultWidth: number,
-      resultHeight: number,
-      cornerPoints?: {
-        topLeftCorner: { x: number; y: number };
-        topRightCorner: { x: number; y: number };
-        bottomLeftCorner: { x: number; y: number };
-        bottomRightCorner: { x: number; y: number };
-      }
+      resultHeight: number
     ): HTMLCanvasElement | null;
-
-    getCornerPoints(contour: unknown): {
-      topLeftCorner: { x: number; y: number };
-      topRightCorner: { x: number; y: number };
-      bottomLeftCorner: { x: number; y: number };
-      bottomRightCorner: { x: number; y: number };
-    };
   }
-}
-
-declare module 'jscanify/client' {
-  export { default } from 'jscanify';
 }

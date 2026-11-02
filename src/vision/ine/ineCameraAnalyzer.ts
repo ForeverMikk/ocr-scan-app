@@ -3,35 +3,25 @@
  * `ineCardDetector.ts`. Toda la lógica de visión vive allá; aquí solo se mueven píxeles.
  */
 
-import { ensureOpenCvLoaded } from './opencvLoader';
+import { canvasToJpeg, loadImage } from '../../shared/image';
+import type { Rect } from '../../types/geometry';
+import { mapGuideFrameToSource } from '../guideFrame/guideFrameGeometry';
+import { ensureOpenCvLoaded } from '../loaders/opencvLoader';
 import {
   analyzeIneRegion,
   extractIneCard,
   INE_ANALYSIS_WIDTH,
+  INE_DETECTION_PAD_RATIO,
   INE_MESSAGES,
   type Cv,
   type CvMat,
   type IneAnalysis,
   type IneSide,
 } from './ineCardDetector';
-import { mapGuideFrameToSource, type Rect } from '../utils/guideFrameGeometry';
-
-export { INE_MESSAGES };
-export type { IneFitStatus, IneSide, Quad } from './ineCardDetector';
-export type IneDetectionResult = IneAnalysis;
-
-/**
- * Margen alrededor del marco que también se analiza. También se usa al recortar
- * la foto final, para que el detector vea los 4 bordes de la tarjeta.
- */
-export const INE_DETECTION_PAD_RATIO = 0.15;
-
-/** Tamaño de salida de la INE enderezada (proporción ID-1, buena resolución para OCR). */
-const INE_OUTPUT_WIDTH = 1586;
-const INE_OUTPUT_HEIGHT = 1000;
 
 const getCv = (): Cv => (window as unknown as { cv: Cv }).cv;
 
+/** Canvas reutilizado entre cuadros (crear uno por muestra genera basura en cada tick). */
 let roiCanvas: HTMLCanvasElement | null = null;
 
 const getRoiCanvas = (): HTMLCanvasElement => {
@@ -100,7 +90,7 @@ export async function analyzeIneInGuideFrame(opts: {
   video: HTMLVideoElement;
   guideFrame: HTMLElement;
   expectedSide?: IneSide;
-}): Promise<IneDetectionResult> {
+}): Promise<IneAnalysis> {
   const { video, guideFrame, expectedSide } = opts;
 
   // HAVE_CURRENT_DATA: aún no hay cuadro que dibujar
@@ -119,24 +109,16 @@ export async function analyzeIneInGuideFrame(opts: {
     src = cv.imread(roi.canvas);
     return analyzeIneRegion(cv, src, roi.frame, { expectedSide });
   } catch (error) {
-    console.warn('[ineDetector] Error al analizar el cuadro:', error);
+    console.warn('[ineCameraAnalyzer] Error al analizar el cuadro:', error);
     return { status: 'searching', message: INE_MESSAGES.error };
   } finally {
     src?.delete();
   }
 }
 
-const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
-  new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('No se pudo leer la imagen capturada'));
-    img.src = dataUrl;
-  });
-
 /**
- * Busca la INE en la foto (recorte del marco + margen) y la devuelve enderezada a
- * 1586×1000 en JPEG. `null` si no se encontró una tarjeta clara (usar el recorte tal cual).
+ * Busca la INE en la foto (recorte del marco + margen) y la devuelve enderezada en JPEG.
+ * `null` si no se encontró una tarjeta clara (el llamador usa el recorte tal cual).
  */
 export async function extractIneFromDataUrl(dataUrl: string): Promise<string | null> {
   let src: CvMat | null = null;
@@ -152,14 +134,14 @@ export async function extractIneFromDataUrl(dataUrl: string): Promise<string | n
     canvas.getContext('2d')?.drawImage(img, 0, 0);
 
     src = cv.imread(canvas);
-    card = extractIneCard(cv, src, INE_OUTPUT_WIDTH, INE_OUTPUT_HEIGHT);
+    card = extractIneCard(cv, src);
     if (!card) return null;
 
     const output = document.createElement('canvas');
     cv.imshow(output, card);
-    return output.toDataURL('image/jpeg', 0.92);
+    return canvasToJpeg(output);
   } catch (error) {
-    console.warn('[ineDetector] No se pudo enderezar la INE:', error);
+    console.warn('[ineCameraAnalyzer] No se pudo enderezar la INE:', error);
     return null;
   } finally {
     src?.delete();

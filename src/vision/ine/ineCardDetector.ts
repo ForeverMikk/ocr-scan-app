@@ -3,6 +3,7 @@
  *
  * Funciona igual en el navegador (OpenCV.js global) y en Node (pruebas con fotos reales
  * en `scripts/test-ine-detector.ts`), así los umbrales se calibran con imágenes reales.
+ * Por eso este archivo no debe importar nada que toque el DOM ni assets de Vite (`?url`).
  *
  * Pipeline:
  *  1. Varias máscaras (2× Canny + Otsu): una sola falla con fondos claros, reflejos o texturas.
@@ -12,7 +13,7 @@
  *  4. Sobre la tarjeta "enderezada" se mide nitidez, reflejos y textura (frente/reverso).
  */
 
-import type { Rect } from '../utils/guideFrameGeometry';
+import type { Rect } from '../../types/geometry';
 
 // OpenCV.js no trae tipos útiles; se tipa como `any` solo en este borde.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,11 +69,21 @@ export interface IneAnalysis {
 // Umbrales (calibrados con dev-fixtures/ine/*; ver scripts/test-ine-detector.ts)
 // ---------------------------------------------------------------------------
 
-/** Ancho al que se reduce la región (marco + margen) antes de analizarla en vivo. */
-export const INE_ANALYSIS_WIDTH = 480;
-
 /** Proporción ID-1 (85.6 × 54 mm). */
 export const INE_ASPECT = 85.6 / 54;
+
+/** Tamaño de la INE enderezada que se envía al OCR (proporción ID-1). */
+export const INE_OUTPUT_WIDTH = 1586;
+export const INE_OUTPUT_HEIGHT = 1000;
+
+/**
+ * Margen alrededor del marco guía (fracción de su tamaño) que también se analiza y se
+ * recorta en la foto final: el detector necesita ver los 4 bordes de la tarjeta.
+ */
+export const INE_DETECTION_PAD_RATIO = 0.15;
+
+/** Ancho al que se reduce la región (marco + margen) antes de analizarla en vivo. */
+export const INE_ANALYSIS_WIDTH = 480;
 /** Desviación máxima de la proporción (≈ 1.29 – 1.89, tolera algo de perspectiva). */
 const ASPECT_TOLERANCE = 0.3;
 /** Casco / rectángulo mínimo; las esquinas redondeadas de la INE dan ~0.97. */
@@ -540,8 +551,8 @@ const EXTRACT_DETECT_WIDTH = 800;
 export const extractIneCard = (
   cv: Cv,
   rgba: CvMat,
-  outW = 1586,
-  outH = 1000
+  outW = INE_OUTPUT_WIDTH,
+  outH = INE_OUTPUT_HEIGHT
 ): CvMat | null => {
   const scale = Math.min(1, EXTRACT_DETECT_WIDTH / rgba.cols);
   const small = new cv.Mat();

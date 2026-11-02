@@ -9,12 +9,23 @@ export const DOCUMENT_CATALOG = {
 } as const;
 
 export type DocumentId = keyof typeof DOCUMENT_CATALOG;
-export type DocumentKey = (typeof DOCUMENT_CATALOG)[DocumentId]['key'];
 
 /** Modo de la UI actual (switch superior). */
 export type CaptureMode = 'ine' | 'documento';
 
+/** INE: frente y reverso. Comprobante/Factura: una sola imagen. */
 export type CaptureSide = 'front' | 'back' | 'single';
+
+/** Imagen capturada (o adjuntada) lista para enviarse al OCR. */
+export interface ScanResult {
+  /** Imagen antes de enderezar/aplanar. */
+  originalDataUrl: string;
+  /** Imagen final; igual a `originalDataUrl` si no se transformó o si falló la detección. */
+  processedDataUrl: string;
+  wasPerspectiveCorrected: boolean;
+}
+
+export type CaptureMap = Partial<Record<CaptureSide, ScanResult>>;
 
 export interface GeoLocationData {
   latitude: number;
@@ -24,5 +35,11 @@ export interface GeoLocationData {
 }
 
 /** Resuelve el id numérico que irá en el payload según el modo de UI. */
-export const documentIdForMode = (mode: CaptureMode): DocumentId =>
-  mode === 'ine' ? 1 : 2;
+export const documentIdForMode = (mode: CaptureMode): DocumentId => (mode === 'ine' ? 1 : 2);
+
+/** Resultado sin transformar (recorte del marco o archivo adjunto). */
+export const unprocessedScan = (dataUrl: string): ScanResult => ({
+  originalDataUrl: dataUrl,
+  processedDataUrl: dataUrl,
+  wasPerspectiveCorrected: false,
+});

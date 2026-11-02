@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type Webcam from 'react-webcam';
-import { ensureOpenCvLoaded } from '../services/opencvLoader';
+import { analyzeIneInGuideFrame } from '../vision/ine/ineCameraAnalyzer';
 import {
-  analyzeIneInGuideFrame,
   INE_MESSAGES,
-  type IneDetectionResult,
+  type IneAnalysis,
   type IneFitStatus,
   type IneSide,
   type Quad,
-} from '../services/ineDetector';
+} from '../vision/ine/ineCardDetector';
+import { ensureOpenCvLoaded } from '../vision/loaders/opencvLoader';
 
 export interface UseIneAutoCaptureOptions {
   enabled: boolean;
@@ -48,7 +48,7 @@ const maxCornerDrift = (a: Quad, b: Quad): number =>
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
-const formatDebug = (result: IneDetectionResult): string | null => {
+const formatDebug = (result: IneAnalysis): string | null => {
   if (result.insideRatio === undefined || result.coverage === undefined) return null;
   const parts = [
     `dentro ${percent(result.insideRatio)}`,
