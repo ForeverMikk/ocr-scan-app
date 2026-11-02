@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/hooks/useineautocapture.ts","./src/services/inedetector.ts","./src/services/opencvloader.ts","./src/services/scannerservice.ts","./src/types/jscanify.d.ts","./src/utils/croptoguideframe.ts"],"errors":true,"version":"6.0.3"}
