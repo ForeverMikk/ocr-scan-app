@@ -17,14 +17,14 @@ npm run dev        # https://localhost:3015 (HTTPS: el teléfono lo necesita par
 
 En el teléfono abre `https://<IP-de-la-PC>:3015` y acepta el certificado de desarrollo.
 
-| Script                 | Qué hace                                                   |
-| ---------------------- | ---------------------------------------------------------- |
-| `npm run dev`          | Servidor de desarrollo (muestra métricas del detector)     |
-| `npm run build`        | Revisión de tipos + build de producción en `dist/`         |
-| `npm run typecheck`    | Solo revisión de tipos (`src/` y `scripts/`)               |
-| `npm run lint`         | ESLint                                                     |
-| `npm run format`       | Formatea todo con Prettier                                 |
-| `npm run test:ine`     | Calibración del detector de INE con fotos (Node, sin cámara) |
+| Script              | Qué hace                                                     |
+| ------------------- | ------------------------------------------------------------ |
+| `npm run dev`       | Servidor de desarrollo (muestra métricas del detector)       |
+| `npm run build`     | Revisión de tipos + build de producción en `dist/`           |
+| `npm run typecheck` | Solo revisión de tipos (`src/` y `scripts/`)                 |
+| `npm run lint`      | ESLint                                                       |
+| `npm run format`    | Formatea todo con Prettier                                   |
+| `npm run test:ine`  | Calibración del detector de INE con fotos (Node, sin cámara) |
 
 ## Estructura
 

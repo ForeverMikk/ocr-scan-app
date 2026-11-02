@@ -143,7 +143,8 @@ export function useIneAutoCapture({
 
         // Cuenta solo si la tarjeta casi no se movió desde la muestra anterior
         const previous = lastQuadRef.current;
-        const isSteady = !previous || maxCornerDrift(previous, result.quadInFrame) <= MAX_CORNER_DRIFT;
+        const isSteady =
+          !previous || maxCornerDrift(previous, result.quadInFrame) <= MAX_CORNER_DRIFT;
         consecutiveGoodRef.current = isSteady ? consecutiveGoodRef.current + 1 : 1;
         lastQuadRef.current = result.quadInFrame;
 

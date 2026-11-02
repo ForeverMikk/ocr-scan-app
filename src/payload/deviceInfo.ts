@@ -1,8 +1,4 @@
-import type {
-  DispositivoData,
-  TelemetriaData,
-  VelocidadRed,
-} from '../types/verificationPayload';
+import type { DispositivoData, TelemetriaData, VelocidadRed } from '../types/verificationPayload';
 
 /**
  * Recolecta datos del dispositivo y telemetría desde el navegador.

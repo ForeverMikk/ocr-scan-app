@@ -176,7 +176,9 @@ export function App() {
           title={SIDE_LABEL[currentSide]}
           capture={activeCapture}
           attachedFileName={attachedFileName}
-          confirmLabel={isIne && currentSide === 'front' ? 'Continuar al Reverso' : 'Confirmar y Enviar'}
+          confirmLabel={
+            isIne && currentSide === 'front' ? 'Continuar al Reverso' : 'Confirmar y Enviar'
+          }
           onRetake={handleRetake}
           onConfirm={handleConfirmStep}
         />

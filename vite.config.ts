@@ -6,10 +6,7 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 /** Entry de navegador real; evita exports subpath y el entry Node (canvas/jsdom). */
-const jscanifyClientFile = path.resolve(
-  rootDir,
-  'node_modules/jscanify/src/jscanify.js'
-);
+const jscanifyClientFile = path.resolve(rootDir, 'node_modules/jscanify/src/jscanify.js');
 
 /**
  * Resuelve `jscanify` y `jscanify/client` al .js de browser sin pasar por

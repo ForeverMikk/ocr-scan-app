@@ -15,8 +15,7 @@ type CvGlobal = { Mat?: unknown };
 
 let loadingPromise: Promise<void> | null = null;
 
-const getGlobalCv = (): CvGlobal | undefined =>
-  (window as unknown as { cv?: CvGlobal }).cv;
+const getGlobalCv = (): CvGlobal | undefined => (window as unknown as { cv?: CvGlobal }).cv;
 
 const isRuntimeReady = (): boolean => Boolean(getGlobalCv()?.Mat);
 
@@ -32,7 +31,8 @@ const injectScript = (): Promise<void> =>
     script.async = true;
     script.dataset.opencv = 'true';
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`No se pudo descargar OpenCV desde ${opencvScriptUrl}`));
+    script.onerror = () =>
+      reject(new Error(`No se pudo descargar OpenCV desde ${opencvScriptUrl}`));
     document.head.appendChild(script);
   });
 

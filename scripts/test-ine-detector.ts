@@ -79,7 +79,14 @@ const writePng = (mat: CvMat, name: string): void => {
 const composeScene = (
   cv: Cv,
   card: CvMat,
-  opts: { bg: number; sceneW?: number; cardW: number; offsetX?: number; tilt?: number; blur?: number }
+  opts: {
+    bg: number;
+    sceneW?: number;
+    cardW: number;
+    offsetX?: number;
+    tilt?: number;
+    blur?: number;
+  }
 ): { scene: CvMat; cardRect: Rect } => {
   const sceneW = opts.sceneW ?? 1000;
   const sceneH = Math.round(sceneW * 0.75);
@@ -89,14 +96,43 @@ const composeScene = (
   const y = Math.round((sceneH - cardH) / 2);
   const tilt = opts.tilt ?? 0; // fracción del ancho que se "encoge" el borde superior
 
-  const scene = new cv.Mat(sceneH, sceneW, cv.CV_8UC4, new cv.Scalar(opts.bg, opts.bg, opts.bg, 255));
+  const scene = new cv.Mat(
+    sceneH,
+    sceneW,
+    cv.CV_8UC4,
+    new cv.Scalar(opts.bg, opts.bg, opts.bg, 255)
+  );
   const shrink = cardW * tilt;
-  const src = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, card.cols, 0, card.cols, card.rows, 0, card.rows]);
+  const src = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0,
+    0,
+    card.cols,
+    0,
+    card.cols,
+    card.rows,
+    0,
+    card.rows,
+  ]);
   const dst = cv.matFromArray(4, 1, cv.CV_32FC2, [
-    x + shrink, y, x + cardW - shrink, y, x + cardW, y + cardH, x, y + cardH,
+    x + shrink,
+    y,
+    x + cardW - shrink,
+    y,
+    x + cardW,
+    y + cardH,
+    x,
+    y + cardH,
   ]);
   const transform = cv.getPerspectiveTransform(src, dst);
-  cv.warpPerspective(card, scene, transform, new cv.Size(sceneW, sceneH), cv.INTER_LINEAR, cv.BORDER_TRANSPARENT, new cv.Scalar());
+  cv.warpPerspective(
+    card,
+    scene,
+    transform,
+    new cv.Size(sceneW, sceneH),
+    cv.INTER_LINEAR,
+    cv.BORDER_TRANSPARENT,
+    new cv.Scalar()
+  );
   src.delete();
   dst.delete();
   transform.delete();
@@ -122,11 +158,23 @@ const cropLikeApp = (cv: Cv, scene: CvMat, centerX: number, centerY: number, fra
   const crop = scene.roi(new cv.Rect(x0, y0, x1 - x0, y1 - y0));
   const k = Math.min(1, ANALYSIS_WIDTH / crop.cols);
   const region = new cv.Mat();
-  cv.resize(crop, region, new cv.Size(Math.round(crop.cols * k), Math.round(crop.rows * k)), 0, 0, cv.INTER_AREA);
+  cv.resize(
+    crop,
+    region,
+    new cv.Size(Math.round(crop.cols * k), Math.round(crop.rows * k)),
+    0,
+    0,
+    cv.INTER_AREA
+  );
   crop.delete();
   return {
     region,
-    frame: { x: (frame.x - x0) * k, y: (frame.y - y0) * k, width: frame.width * k, height: frame.height * k },
+    frame: {
+      x: (frame.x - x0) * k,
+      y: (frame.y - y0) * k,
+      width: frame.width * k,
+      height: frame.height * k,
+    },
   };
 };
 
@@ -178,42 +226,95 @@ const main = async () => {
   if (!realFrontCard) throw new Error('No se pudo extraer la INE real');
 
   /** Escena sintética con el marco ajustado para que la tarjeta lo llene al ~92%. */
-  const synthetic = (card: CvMat, opts: Parameters<typeof composeScene>[2], frameScale = 1 / 0.92, side?: IneSide) => () => {
-    const { scene, cardRect } = composeScene(cv, card, opts);
-    return {
-      scene,
-      centerX: scene.cols / 2,
-      centerY: scene.rows / 2,
-      frameW: cardRect.width * frameScale,
-      side,
+  const synthetic =
+    (
+      card: CvMat,
+      opts: Parameters<typeof composeScene>[2],
+      frameScale = 1 / 0.92,
+      side?: IneSide
+    ) =>
+    () => {
+      const { scene, cardRect } = composeScene(cv, card, opts);
+      return {
+        scene,
+        centerX: scene.cols / 2,
+        centerY: scene.rows / 2,
+        frameW: cardRect.width * frameScale,
+        side,
+      };
     };
-  };
 
   /** Foto real con el marco colocado alrededor de la tarjeta detectada. */
-  const realPhoto = (photo: CvMat, side?: IneSide, frameScale = 1 / 0.92) => () => {
-    const card = locateCard(cv, photo);
-    if (!card) throw new Error('No se localizó la tarjeta en la foto real');
-    return {
-      scene: photo.clone(),
-      centerX: card.x + card.width / 2,
-      centerY: card.y + card.height / 2,
-      frameW: card.width * frameScale,
-      side,
+  const realPhoto =
+    (photo: CvMat, side?: IneSide, frameScale = 1 / 0.92) =>
+    () => {
+      const card = locateCard(cv, photo);
+      if (!card) throw new Error('No se localizó la tarjeta en la foto real');
+      return {
+        scene: photo.clone(),
+        centerX: card.x + card.width / 2,
+        centerY: card.y + card.height / 2,
+        frameW: card.width * frameScale,
+        side,
+      };
     };
-  };
 
   const cases: Case[] = [
-    { name: 'frente · fondo oscuro', run: synthetic(front, { bg: 35, cardW: 600 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'frente · fondo claro', run: synthetic(front, { bg: 225, cardW: 600 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'frente · perspectiva leve', run: synthetic(front, { bg: 60, cardW: 600, tilt: 0.05 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'reverso · fondo oscuro', run: synthetic(back, { bg: 35, cardW: 600 }, undefined, 'back'), expect: INE_MESSAGES.good },
-    { name: 'reverso cuando se pide frente', run: synthetic(back, { bg: 35, cardW: 600 }, undefined, 'front'), expect: INE_MESSAGES.showFront },
-    { name: 'frente · desenfoque leve', run: synthetic(front, { bg: 35, cardW: 600, blur: 5 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'REAL frente · desenfoque leve', run: synthetic(realFrontCard, { bg: 60, cardW: 600, blur: 5 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'frente · desenfocado', run: synthetic(front, { bg: 35, cardW: 600, blur: 15 }, undefined, 'front'), expect: INE_MESSAGES.blurry },
-    { name: 'REAL frente · desenfocado', run: synthetic(realFrontCard, { bg: 60, cardW: 600, blur: 15 }, undefined, 'front'), expect: INE_MESSAGES.blurry },
-    { name: 'frente · muy pequeña', run: synthetic(front, { bg: 35, cardW: 350 }, 600 / 350 / 0.92, 'front'), expect: INE_MESSAGES.tooSmall },
-    { name: 'frente · desplazada', run: synthetic(front, { bg: 35, cardW: 600, offsetX: 140 }, undefined, 'front'), expect: INE_MESSAGES.center },
+    {
+      name: 'frente · fondo oscuro',
+      run: synthetic(front, { bg: 35, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'frente · fondo claro',
+      run: synthetic(front, { bg: 225, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'frente · perspectiva leve',
+      run: synthetic(front, { bg: 60, cardW: 600, tilt: 0.05 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'reverso · fondo oscuro',
+      run: synthetic(back, { bg: 35, cardW: 600 }, undefined, 'back'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'reverso cuando se pide frente',
+      run: synthetic(back, { bg: 35, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.showFront,
+    },
+    {
+      name: 'frente · desenfoque leve',
+      run: synthetic(front, { bg: 35, cardW: 600, blur: 5 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'REAL frente · desenfoque leve',
+      run: synthetic(realFrontCard, { bg: 60, cardW: 600, blur: 5 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'frente · desenfocado',
+      run: synthetic(front, { bg: 35, cardW: 600, blur: 15 }, undefined, 'front'),
+      expect: INE_MESSAGES.blurry,
+    },
+    {
+      name: 'REAL frente · desenfocado',
+      run: synthetic(realFrontCard, { bg: 60, cardW: 600, blur: 15 }, undefined, 'front'),
+      expect: INE_MESSAGES.blurry,
+    },
+    {
+      name: 'frente · muy pequeña',
+      run: synthetic(front, { bg: 35, cardW: 350 }, 600 / 350 / 0.92, 'front'),
+      expect: INE_MESSAGES.tooSmall,
+    },
+    {
+      name: 'frente · desplazada',
+      run: synthetic(front, { bg: 35, cardW: 600, offsetX: 140 }, undefined, 'front'),
+      expect: INE_MESSAGES.center,
+    },
     {
       name: 'sin tarjeta (fondo vacío)',
       run: () => {
@@ -224,9 +325,21 @@ const main = async () => {
     },
     { name: 'REAL frente', run: realPhoto(realFront, 'front'), expect: INE_MESSAGES.good },
     { name: 'REAL reverso', run: realPhoto(realBack, 'back'), expect: INE_MESSAGES.good },
-    { name: 'REAL reverso cuando se pide frente', run: realPhoto(realBack, 'front'), expect: INE_MESSAGES.showFront },
-    { name: 'REAL frente · fondo claro', run: synthetic(realFrontCard, { bg: 215, cardW: 600 }, undefined, 'front'), expect: INE_MESSAGES.good },
-    { name: 'REAL frente · perspectiva', run: synthetic(realFrontCard, { bg: 90, cardW: 600, tilt: 0.06 }, undefined, 'front'), expect: INE_MESSAGES.good },
+    {
+      name: 'REAL reverso cuando se pide frente',
+      run: realPhoto(realBack, 'front'),
+      expect: INE_MESSAGES.showFront,
+    },
+    {
+      name: 'REAL frente · fondo claro',
+      run: synthetic(realFrontCard, { bg: 215, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'REAL frente · perspectiva',
+      run: synthetic(realFrontCard, { bg: 90, cardW: 600, tilt: 0.06 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
     {
       // La INE sostenida en vertical dentro de un marco horizontal
       name: 'frente vertical (girada)',
@@ -235,7 +348,13 @@ const main = async () => {
         const scene = new cv.Mat();
         cv.rotate(landscape, scene, cv.ROTATE_90_CLOCKWISE);
         landscape.delete();
-        return { scene, centerX: scene.cols / 2, centerY: scene.rows / 2, frameW: scene.cols * 0.9, side: 'front' as IneSide };
+        return {
+          scene,
+          centerX: scene.cols / 2,
+          centerY: scene.rows / 2,
+          frameW: scene.cols * 0.9,
+          side: 'front' as IneSide,
+        };
       },
       expect: INE_MESSAGES.rotated,
     },

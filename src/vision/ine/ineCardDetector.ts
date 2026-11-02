@@ -359,7 +359,12 @@ export const findCardCandidates = (cv: Cv, gray: CvMat, minAreaRatio: number): C
 
 /** Endereza la tarjeta (homografía) a `width × height`. El llamador libera el Mat. */
 export const warpQuad = (cv: Cv, src: CvMat, quad: Quad, width: number, height: number): CvMat => {
-  const srcPts = cv.matFromArray(4, 1, cv.CV_32FC2, quadPoints(quad).flatMap((p) => [p.x, p.y]));
+  const srcPts = cv.matFromArray(
+    4,
+    1,
+    cv.CV_32FC2,
+    quadPoints(quad).flatMap((p) => [p.x, p.y])
+  );
   const dstPts = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height]);
   const transform = cv.getPerspectiveTransform(srcPts, dstPts);
   const out = new cv.Mat();
@@ -486,10 +491,22 @@ export const analyzeIneRegion = (
     const insideRatio = cardArea > 0 ? overlap / cardArea : 0;
     const coverage = frameArea > 0 ? overlap / frameArea : 0;
     const quadInFrame: Quad = {
-      tl: { x: (best.quad.tl.x - frame.x) / frame.width, y: (best.quad.tl.y - frame.y) / frame.height },
-      tr: { x: (best.quad.tr.x - frame.x) / frame.width, y: (best.quad.tr.y - frame.y) / frame.height },
-      br: { x: (best.quad.br.x - frame.x) / frame.width, y: (best.quad.br.y - frame.y) / frame.height },
-      bl: { x: (best.quad.bl.x - frame.x) / frame.width, y: (best.quad.bl.y - frame.y) / frame.height },
+      tl: {
+        x: (best.quad.tl.x - frame.x) / frame.width,
+        y: (best.quad.tl.y - frame.y) / frame.height,
+      },
+      tr: {
+        x: (best.quad.tr.x - frame.x) / frame.width,
+        y: (best.quad.tr.y - frame.y) / frame.height,
+      },
+      br: {
+        x: (best.quad.br.x - frame.x) / frame.width,
+        y: (best.quad.br.y - frame.y) / frame.height,
+      },
+      bl: {
+        x: (best.quad.bl.x - frame.x) / frame.width,
+        y: (best.quad.bl.y - frame.y) / frame.height,
+      },
     };
     const metrics = { insideRatio, coverage, aspectRatio: best.aspectRatio, quadInFrame };
 
@@ -558,7 +575,14 @@ export const extractIneCard = (
   const small = new cv.Mat();
   const gray = new cv.Mat();
   try {
-    cv.resize(rgba, small, new cv.Size(Math.round(rgba.cols * scale), Math.round(rgba.rows * scale)), 0, 0, cv.INTER_AREA);
+    cv.resize(
+      rgba,
+      small,
+      new cv.Size(Math.round(rgba.cols * scale), Math.round(rgba.rows * scale)),
+      0,
+      0,
+      cv.INTER_AREA
+    );
     cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
 
     // La INE debe ocupar al menos ~20% de la foto (ya viene recortada al marco + margen)
