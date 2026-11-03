@@ -18,8 +18,43 @@ import {
   type IneAnalysis,
   type IneSide,
 } from './ineCardDetector';
+import { toVerifyGray, verifyIneCard, type IneTemplates, type IneVerification } from './ineVerifier';
+import frontTemplateUrl from './templates/ine-frente.jpg';
+import backTemplateUrl from './templates/ine-reverso.jpg';
 
 const getCv = (): Cv => (window as unknown as { cv: Cv }).cv;
+
+/** Dibuja un data URL / URL de imagen en un canvas y lo lee como Mat RGBA. */
+const imreadUrl = async (cv: Cv, url: string): Promise<CvMat> => {
+  const img = await loadImage(url);
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.getContext('2d')?.drawImage(img, 0, 0);
+  return cv.imread(canvas);
+};
+
+let templatesPromise: Promise<IneTemplates> | null = null;
+
+/** Plantillas oficiales de frente y reverso, preparadas una sola vez. */
+const loadTemplates = (cv: Cv): Promise<IneTemplates> => {
+  templatesPromise ??= (async () => {
+    const prepare = async (url: string) => {
+      const rgba = await imreadUrl(cv, url);
+      try {
+        return toVerifyGray(cv, rgba);
+      } finally {
+        rgba.delete();
+      }
+    };
+    const [front, back] = await Promise.all([prepare(frontTemplateUrl), prepare(backTemplateUrl)]);
+    return { front, back };
+  })().catch((error: unknown) => {
+    templatesPromise = null;
+    throw error;
+  });
+  return templatesPromise;
+};
 
 /** Canvas reutilizado entre cuadros (crear uno por muestra genera basura en cada tick). */
 let roiCanvas: HTMLCanvasElement | null = null;
@@ -116,32 +151,38 @@ export async function analyzeIneInGuideFrame(opts: {
   }
 }
 
+export interface IneCardCapture {
+  /** Tarjeta enderezada (y girada si venía de cabeza), en JPEG. */
+  dataUrl: string;
+  /** Resultado del 2º análisis: ¿es INE? ¿qué lado? */
+  verification: IneVerification;
+}
+
 /**
- * Busca la INE en la foto (recorte del marco + margen) y la devuelve enderezada en JPEG.
- * `null` si no se encontró una tarjeta clara (el llamador usa el recorte tal cual).
+ * Busca la tarjeta en la foto (recorte del marco + margen), la endereza y la verifica
+ * contra las plantillas de la INE. `null` si no se encontró ninguna tarjeta.
  */
-export async function extractIneFromDataUrl(dataUrl: string): Promise<string | null> {
+export async function extractAndVerifyIne(dataUrl: string): Promise<IneCardCapture | null> {
   let src: CvMat | null = null;
   let card: CvMat | null = null;
   try {
     await ensureOpenCvLoaded();
     const cv = getCv();
-    const img = await loadImage(dataUrl);
+    const templates = await loadTemplates(cv);
 
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    canvas.getContext('2d')?.drawImage(img, 0, 0);
-
-    src = cv.imread(canvas);
+    src = await imreadUrl(cv, dataUrl);
     card = extractIneCard(cv, src);
     if (!card) return null;
 
+    const verification = verifyIneCard(cv, card, templates);
+    // Girar 180° = voltear en ambos ejes (seguro en el mismo Mat)
+    if (verification.upsideDown) cv.flip(card, card, -1);
+
     const output = document.createElement('canvas');
     cv.imshow(output, card);
-    return canvasToJpeg(output);
+    return { dataUrl: canvasToJpeg(output), verification };
   } catch (error) {
-    console.warn('[ineCameraAnalyzer] No se pudo enderezar la INE:', error);
+    console.warn('[ineCameraAnalyzer] No se pudo enderezar/verificar la INE:', error);
     return null;
   } finally {
     src?.delete();

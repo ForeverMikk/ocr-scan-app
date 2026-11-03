@@ -57,6 +57,7 @@ const formatDebug = (result: IneAnalysis): string | null => {
   ];
   if (result.sharpness !== undefined) parts.push(`nitidez ${Math.round(result.sharpness)}`);
   if (result.texture !== undefined) parts.push(`textura ${result.texture.toFixed(2)}`);
+  if (result.paper !== undefined) parts.push(`papel ${result.paper.toFixed(2)}`);
   return parts.join(' · ');
 };
 

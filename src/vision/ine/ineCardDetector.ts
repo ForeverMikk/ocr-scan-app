@@ -61,6 +61,8 @@ export interface IneAnalysis {
   glare?: number;
   /** Densidad de bordes en el centro de la tarjeta (el reverso con QR es muy alta). */
   texture?: number;
+  /** Fracción de la tarjeta con fondo claro y poco saturado (tipo papel de identificación). */
+  paper?: number;
   /** Esquinas normalizadas al marco (0..1), para medir estabilidad entre cuadros. */
   quadInFrame?: Quad;
 }
@@ -118,6 +120,15 @@ export const SHARPNESS_MIN = 60;
 export const GLARE_MAX = 0.15;
 /** Densidad de bordes a partir de la cual es claramente el reverso (bloques QR). */
 export const BACK_TEXTURE_MIN = 0.2;
+/**
+ * Mínimo de "fondo tipo papel" para considerar que es una identificación. Las credenciales
+ * oficiales son claras y poco saturadas (≈ 0.7–0.9); tarjetas de colores como la del metro ≈ 0.06.
+ * Por debajo, el detector actúa como si no hubiera nada (sin marco verde ni mensajes).
+ */
+export const PAPER_MIN = 0.35;
+/** Píxel "tipo papel" en HSV de OpenCV (S y V en 0..255). */
+const PAPER_MAX_SATURATION = 70;
+const PAPER_MIN_VALUE = 110;
 
 export const INE_MESSAGES = {
   searching: 'Coloca tu INE dentro del marco',
@@ -434,6 +445,25 @@ export const measureCardQuality = (cv: Cv, gray: CvMat, quad: Quad): CardQuality
   }
 };
 
+/** Fracción de la tarjeta (RGBA) con píxeles claros y poco saturados. */
+export const measurePaperRatio = (cv: Cv, rgba: CvMat, quad: Quad): number => {
+  // Baja resolución basta: solo importa la distribución de color
+  const card = warpQuad(cv, rgba, quad, 160, 101);
+  const rgb = new cv.Mat();
+  const hsv = new cv.Mat();
+  const low = new cv.Mat(card.rows, card.cols, cv.CV_8UC3, [0, 0, PAPER_MIN_VALUE, 0]);
+  const high = new cv.Mat(card.rows, card.cols, cv.CV_8UC3, [180, PAPER_MAX_SATURATION, 255, 0]);
+  const mask = new cv.Mat();
+  try {
+    cv.cvtColor(card, rgb, cv.COLOR_RGBA2RGB);
+    cv.cvtColor(rgb, hsv, cv.COLOR_RGB2HSV);
+    cv.inRange(hsv, low, high, mask);
+    return cv.countNonZero(mask) / (card.rows * card.cols);
+  } finally {
+    [card, rgb, hsv, low, high, mask].forEach((m) => m.delete());
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Análisis en vivo (marco guía)
 // ---------------------------------------------------------------------------
@@ -485,6 +515,12 @@ export const analyzeIneRegion = (
       return { status: 'searching', message: INE_MESSAGES.searching };
     }
 
+    // 0) Si no parece identificación (tarjeta de colores, etc.), se ignora sin mensajes
+    const paper = measurePaperRatio(cv, rgba, best.quad);
+    if (paper < PAPER_MIN) {
+      return { status: 'searching', message: INE_MESSAGES.searching, paper };
+    }
+
     const card = best.bounds;
     const cardArea = card.width * card.height;
     const overlap = intersectionArea(card, frame);
@@ -508,7 +544,7 @@ export const analyzeIneRegion = (
         y: (best.quad.bl.y - frame.y) / frame.height,
       },
     };
-    const metrics = { insideRatio, coverage, aspectRatio: best.aspectRatio, quadInFrame };
+    const metrics = { insideRatio, coverage, aspectRatio: best.aspectRatio, quadInFrame, paper };
 
     // 1) Se sale del área analizada → la tarjeta real es más grande o está desplazada
     const borderX = roiW * BORDER_TOUCH_RATIO;

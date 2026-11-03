@@ -301,6 +301,54 @@ se probó en el teléfono y detectó automáticamente frente y reverso.
 
 ---
 
+## 9b. Falsos positivos: tarjeta del metro y licencia → verificación en 2 etapas
+
+En el teléfono, **la tarjeta del metro y la licencia de conducir se detectaban como INE**: tienen
+el mismo tamaño ID-1, así que forma, nitidez y textura no las distinguen. Se replicó el flujo del
+OCR de la empresa:
+
+| Tarjeta | 1ª etapa (en vivo) | 2ª etapa (sobre la captura) | Qué ve el usuario |
+| --- | --- | --- | --- |
+| Metro | No parece identificación | — | Nada: sigue "Coloca tu INE…" |
+| Licencia | Sí parece identificación → verde y captura | No es INE | "No reconocimos una INE. Vuelve a intentarlo." |
+| INE | Sí → verde y captura | Es INE (y del lado correcto) | Revisión y sigue al reverso |
+
+**1ª etapa · ¿parece identificación?** (`measurePaperRatio` en `ineCardDetector.ts`). Las
+identificaciones están impresas sobre un fondo **claro y poco saturado**; una tarjeta de
+transporte o bancaria es casi toda color. Se mide qué fracción de la tarjeta enderezada cumple
+saturación ≤ 70 y brillo ≥ 110 (HSV). Si es menor a **0.35** se ignora sin mensajes.
+Valores: metro 0.06–0.09, INE 0.70–0.91, licencia 0.90, INE real con poca luz (brillo × 0.6) 0.43.
+
+**2ª etapa · ¿es INE?** (`ineVerifier.ts`, interno, sin API). Se probó ORB (puntos clave) y se
+descartó: la INE real contra la muestra oficial solo daba 6 coincidencias. Lo que funcionó fue
+**comparar zonas impresas fijas** del diseño de la INE contra plantillas de la muestra oficial
+(`vision/ine/templates/`, 640×404 en gris):
+
+- Frente: encabezado, escudo, "MÉXICO", y las etiquetas NOMBRE, DOMICILIO, CLAVE DE ELECTOR, CURP
+  y FECHA DE NACIMIENTO.
+- Reverso: logo INE, "IDMEX", "ELECCIONES FEDERALES" y el texto junto a la firma.
+
+Cada zona se busca con `matchTemplate` (correlación normalizada) dejando ±5 % / ±6 % de holgura,
+y el puntaje es la **mediana** de las zonas (una zona tapada por reflejo no lo tumba). Se prueba
+frente/reverso y derecha/de cabeza; si viene de cabeza la foto final se gira 180°. Es INE si el
+puntaje es ≥ **0.65**.
+
+| Tarjeta | Puntaje |
+| --- | --- |
+| INE real frente / reverso (también de cabeza) | 0.83 – 0.85 |
+| INE real con perspectiva fuerte (sintética) | 0.70 |
+| Licencia | 0.34 |
+| Metro | 0.35 |
+
+Si es INE pero del otro lado (posible en disparo manual) se pide el lado correcto. Tras un
+rechazo, el aviso se muestra 2.5 s y la detección automática se pausa para no disparar en bucle
+sobre la misma tarjeta. La calibración ahora tiene **32/32 casos** (escenas + verificación).
+
+Limitación: las plantillas son del modelo de INE actual (el de las fotos). Modelos anteriores de
+credencial tienen otro diseño y serían rechazados; habría que agregar sus plantillas.
+
+---
+
 ## 10. Interfaz final de captura
 
 - **Casilla "Detección automática"** (solo INE) sobre el obturador:
@@ -323,7 +371,7 @@ src/
   hooks/        useCameraPermission, useIneAutoCapture
   vision/
     loaders/    Carga de OpenCV y jscanify
-    ine/        ineCardDetector (núcleo puro) + ineCameraAnalyzer (navegador)
+    ine/        ineCardDetector + ineVerifier (núcleo puro), ineCameraAnalyzer (navegador), templates/
     document/   Aplanado de documentos (jscanify)
     guideFrame/ Mapeo marco ↔ video y recorte
     processCameraShot.ts   Foto → imagen final
@@ -351,6 +399,7 @@ scripts/test-ine-detector.ts   Calibración en Node
 | Fotos borrosas, con reflejo o del lado equivocado | Métricas de calidad sobre la tarjeta enderezada |
 | Disparo con la mano en movimiento | Estabilidad de esquinas entre cuadros |
 | Imposible probar con la webcam de la PC | Calibración en Node con fotos reales |
+| Metro y licencia detectadas como INE | 1ª etapa por fondo claro tipo identificación + 2ª etapa por zonas impresas de la INE |
 
 ---
 

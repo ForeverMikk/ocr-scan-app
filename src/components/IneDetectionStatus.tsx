@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { COLORS } from '../shared/theme';
 import type { IneFitStatus } from '../vision/ine/ineCardDetector';
+import { Notice } from './Notice';
 
 const TEXT_COLOR: Record<IneFitStatus, string> = {
   good: COLORS.detectionGoodText,
@@ -13,7 +14,6 @@ export function IneDetectionStatus({
   status,
   message,
   debug,
-  isProcessing,
   isWarmingUp,
   loadError,
 }: {
@@ -21,13 +21,10 @@ export function IneDetectionStatus({
   message: string;
   /** Métricas del detector; solo se muestran en `npm run dev`. */
   debug: string | null;
-  isProcessing: boolean;
   isWarmingUp: boolean;
   loadError: string | null;
 }) {
-  const text = isProcessing
-    ? 'Capturando…'
-    : (loadError ?? (isWarmingUp ? 'Preparando detector…' : message));
+  const text = loadError ?? (isWarmingUp ? 'Preparando detector…' : message);
 
   return (
     <>
@@ -37,9 +34,7 @@ export function IneDetectionStatus({
       {import.meta.env.DEV && debug && <p style={styles.debug}>{debug}</p>}
 
       {status === 'bad' && (
-        <p style={styles.warning} role="status">
-          ⚠️ Coloca la INE correctamente dentro del marco
-        </p>
+        <Notice tone="error" text="⚠️ Coloca la INE correctamente dentro del marco" />
       )}
     </>
   );
@@ -53,14 +48,4 @@ const styles = {
     textShadow: '0 1px 3px rgba(0,0,0,0.8)',
   },
   debug: { margin: 0, fontSize: 11, opacity: 0.75, fontFamily: 'monospace' },
-  warning: {
-    margin: 0,
-    padding: '8px 12px',
-    borderRadius: 8,
-    background: 'rgba(239, 68, 68, 0.85)',
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: 600,
-    textAlign: 'center',
-  },
 } satisfies Record<string, CSSProperties>;

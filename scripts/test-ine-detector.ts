@@ -28,10 +28,13 @@ import {
   type CvMat,
   type IneSide,
 } from '../src/vision/ine/ineCardDetector.ts';
+import { toVerifyGray, verifyIneCard, type IneTemplates } from '../src/vision/ine/ineVerifier.ts';
 import type { Rect } from '../src/types/geometry.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const fixtures = join(root, 'dev-fixtures', 'ine');
+const notIneFixtures = join(root, 'dev-fixtures', 'no-ine');
+const templatesDir = join(root, 'src', 'vision', 'ine', 'templates');
 const outDir = join(root, 'dev-fixtures', 'out');
 mkdirSync(outDir, { recursive: true });
 
@@ -221,9 +224,22 @@ const main = async () => {
   realFrontPortrait.delete();
   realBackPortrait.delete();
 
-  // Tarjeta real ya recortada, para pegarla en otros fondos
+  // Tarjetas reales ya recortadas, para pegarlas en otros fondos y verificarlas
   const realFrontCard = extractIneCard(cv, realFront, 793, 500);
-  if (!realFrontCard) throw new Error('No se pudo extraer la INE real');
+  const realBackCard = extractIneCard(cv, realBack, 793, 500);
+  if (!realFrontCard || !realBackCard) throw new Error('No se pudo extraer la INE real');
+
+  // Tarjetas que NO son INE: metro (colores) y licencia (fondo claro, como una identificación)
+  const metro = readImage(cv, join(notIneFixtures, 'metro.png'));
+  const license = readImage(cv, join(fixtures, 'real', 'licencia.png'));
+
+  /** Simula poca luz: escala el brillo de la tarjeta. */
+  const darken = (m: CvMat, factor: number) => {
+    const out = new cv.Mat();
+    m.convertTo(out, -1, factor, 0);
+    return out;
+  };
+  const realFrontDim = darken(realFrontCard, 0.6);
 
   /** Escena sintética con el marco ajustado para que la tarjeta lo llene al ~92%. */
   const synthetic =
@@ -358,6 +374,28 @@ const main = async () => {
       },
       expect: INE_MESSAGES.rotated,
     },
+    // --- 1ª etapa: ¿parece identificación? ---
+    {
+      name: 'tarjeta metro (no es ID)',
+      run: synthetic(metro, { bg: 35, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.searching,
+    },
+    {
+      name: 'tarjeta metro · fondo claro',
+      run: synthetic(metro, { bg: 215, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.searching,
+    },
+    {
+      // Pasa la 1ª etapa (es una identificación); la descarta la 2ª
+      name: 'licencia (sí parece ID)',
+      run: synthetic(license, { bg: 35, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
+    {
+      name: 'REAL frente · poca luz',
+      run: synthetic(realFrontDim, { bg: 25, cardW: 600 }, undefined, 'front'),
+      expect: INE_MESSAGES.good,
+    },
   ];
 
   let passed = 0;
@@ -378,7 +416,7 @@ const main = async () => {
     console.log(
       `    dentro ${fmt(result.insideRatio)} · cubre ${fmt(result.coverage)} · prop ${fmt(result.aspectRatio)}` +
         ` · nitidez ${fmt(result.sharpness, 0)} · reflejo ${fmt(result.glare, 3)} · textura ${fmt(result.texture, 3)}` +
-        ` · ${ms.toFixed(0)} ms`
+        ` · papel ${fmt(result.paper)} · ${ms.toFixed(0)} ms`
     );
 
     const slug = testCase.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
@@ -391,8 +429,85 @@ const main = async () => {
     scene.delete();
   }
 
-  console.log(`\n${passed}/${cases.length} casos correctos`);
-  process.exitCode = passed === cases.length ? 0 : 1;
+  // -------------------------------------------------------------------------
+  // 2ª etapa: la tarjeta capturada y enderezada, ¿es INE? ¿qué lado?
+  // -------------------------------------------------------------------------
+
+  const loadTemplate = (file: string) => {
+    const rgba = readImage(cv, join(templatesDir, file));
+    const gray = toVerifyGray(cv, rgba);
+    rgba.delete();
+    return gray;
+  };
+  const templates: IneTemplates = {
+    front: loadTemplate('ine-frente.jpg'),
+    back: loadTemplate('ine-reverso.jpg'),
+  };
+
+  /** Pasa la tarjeta por una escena como en la app y devuelve lo que se extraería. */
+  const captured = (card: CvMat, opts: Parameters<typeof composeScene>[2]) => {
+    const { scene } = composeScene(cv, card, opts);
+    const out = extractIneCard(cv, scene);
+    scene.delete();
+    if (!out) throw new Error('No se extrajo la tarjeta de la escena');
+    return out;
+  };
+  const upsideDown = (m: CvMat) => {
+    const out = new cv.Mat();
+    cv.rotate(m, out, cv.ROTATE_180);
+    return out;
+  };
+
+  const verifyCases: {
+    name: string;
+    card: () => CvMat;
+    expect: { isIne: boolean; side?: IneSide; upsideDown?: boolean };
+  }[] = [
+    { name: 'REAL frente', card: () => realFrontCard.clone(), expect: { isIne: true, side: 'front', upsideDown: false } },
+    { name: 'REAL reverso', card: () => realBackCard.clone(), expect: { isIne: true, side: 'back', upsideDown: false } },
+    { name: 'REAL frente · de cabeza', card: () => upsideDown(realFrontCard), expect: { isIne: true, side: 'front', upsideDown: true } },
+    { name: 'REAL reverso · de cabeza', card: () => upsideDown(realBackCard), expect: { isIne: true, side: 'back', upsideDown: true } },
+    {
+      name: 'REAL frente · capturada con desenfoque',
+      card: () => captured(realFrontCard, { bg: 60, cardW: 600, blur: 5 }),
+      expect: { isIne: true, side: 'front' },
+    },
+    {
+      name: 'REAL frente · capturada con perspectiva',
+      card: () => captured(realFrontCard, { bg: 90, cardW: 600, tilt: 0.06 }),
+      expect: { isIne: true, side: 'front' },
+    },
+    { name: 'REAL frente · poca luz', card: () => realFrontDim.clone(), expect: { isIne: true, side: 'front' } },
+    { name: 'licencia', card: () => license.clone(), expect: { isIne: false } },
+    { name: 'licencia · de cabeza', card: () => upsideDown(license), expect: { isIne: false } },
+    { name: 'tarjeta metro', card: () => metro.clone(), expect: { isIne: false } },
+  ];
+
+  console.log('\n--- 2º análisis (verificación INE) ---');
+  let verifyPassed = 0;
+  for (const testCase of verifyCases) {
+    const card = testCase.card();
+    const result = verifyIneCard(cv, card, templates);
+    card.delete();
+    const { expect } = testCase;
+    const ok =
+      result.isIne === expect.isIne &&
+      (expect.side === undefined || result.side === expect.side) &&
+      (expect.upsideDown === undefined || result.upsideDown === expect.upsideDown);
+    if (ok) verifyPassed++;
+    const label = result.isIne
+      ? `INE ${result.side}${result.upsideDown ? ' (de cabeza)' : ''}`
+      : 'no es INE';
+    console.log(
+      `${ok ? '✔' : '✘'} ${testCase.name.padEnd(40)} ${label.padEnd(22)} score ${result.score.toFixed(2)}` +
+        (ok ? '' : `   (esperado: ${JSON.stringify(expect)})`)
+    );
+  }
+
+  const total = cases.length + verifyCases.length;
+  const totalPassed = passed + verifyPassed;
+  console.log(`\n${totalPassed}/${total} casos correctos`);
+  process.exitCode = totalPassed === total ? 0 : 1;
 };
 
 main().catch((error) => {

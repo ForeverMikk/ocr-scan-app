@@ -13,6 +13,7 @@ import { CaptureControls } from './components/CaptureControls';
 import { GuideFrame } from './components/GuideFrame';
 import { IneDetectionStatus } from './components/IneDetectionStatus';
 import { ModeSwitch } from './components/ModeSwitch';
+import { Notice } from './components/Notice';
 import { PermissionGate } from './components/PermissionGate';
 import { ReviewView } from './components/ReviewView';
 import { useCameraPermission } from './hooks/useCameraPermission';
@@ -27,7 +28,9 @@ import {
   type CaptureMap,
   type CaptureMode,
   type CaptureSide,
+  type ScanResult,
 } from './types/capture';
+import type { IneFitStatus, IneSide } from './vision/ine/ineCardDetector';
 import { ensureOpenCvLoaded } from './vision/loaders/opencvLoader';
 import { processDocumentShot, processIneShot } from './vision/processCameraShot';
 
@@ -35,6 +38,17 @@ const SIDE_LABEL: Record<CaptureSide, string> = {
   front: 'Frente',
   back: 'Reverso',
   single: 'Documento',
+};
+
+/** Tiempo que se muestra el rechazo del 2º análisis antes de volver a buscar. */
+const REJECTION_NOTICE_MS = 2500;
+
+const REJECTION_MESSAGE: Record<'notIne' | 'wrongSide', (expected: IneSide) => string> = {
+  notIne: () => 'No reconocimos una INE. Vuelve a intentarlo.',
+  wrongSide: (expected) =>
+    expected === 'front'
+      ? 'Esa es la parte de atrás. Muestra el FRENTE de tu INE.'
+      : 'Ese es el frente. Muestra el REVERSO de tu INE.',
 };
 
 export function App() {
@@ -57,6 +71,10 @@ export function App() {
   const [isProcessing, setIsProcessing] = useState(false);
   /** Nombre del PDF adjunto (si aplica) para la vista de revisión. */
   const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
+  /** Mensaje cuando el 2º análisis rechaza la captura (no es INE o es el otro lado). */
+  const [ineRejection, setIneRejection] = useState<string | null>(null);
+
+  const expectedIneSide: IneSide = currentSide === 'back' ? 'back' : 'front';
 
   const webcamRef = useRef<Webcam>(null);
   const guideFrameRef = useRef<HTMLDivElement>(null);
@@ -69,6 +87,13 @@ export function App() {
     }
   }, [permission.granted, isIne, flattenDocument]);
 
+  // El rechazo se muestra unos segundos; al quitarse, la detección automática se reanuda
+  useEffect(() => {
+    if (!ineRejection) return;
+    const timer = window.setTimeout(() => setIneRejection(null), REJECTION_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [ineRejection]);
+
   // Al cambiar INE ↔ Documento, reinicia el flujo de captura
   const handleModeChange = (mode: CaptureMode) => {
     setCaptureMode(mode);
@@ -76,11 +101,12 @@ export function App() {
     setIsReviewing(false);
     setIsProcessing(false);
     setAttachedFileName(null);
+    setIneRejection(null);
     setCurrentSide(mode === 'ine' ? 'front' : 'single');
     setFlattenDocument(true);
   };
 
-  // ---- Captura: foto → recorte al marco → INE enderezada / documento aplanado ----
+  // ---- Captura: foto → recorte al marco → INE enderezada y verificada / documento aplanado ----
   const handleCapturePhoto = useCallback(async () => {
     const webcam = webcamRef.current;
     const video = webcam?.video;
@@ -92,26 +118,38 @@ export function App() {
 
     setIsProcessing(true);
     setAttachedFileName(null);
+    setIneRejection(null);
     try {
       const shot = { screenshot, video, guideFrame };
-      const result = isIne
-        ? await processIneShot(shot)
-        : await processDocumentShot(shot, flattenDocument);
+      let result: ScanResult;
+      if (isIne) {
+        // 2º análisis: si no es INE (o es el otro lado) se avisa y se vuelve a la cámara
+        const outcome = await processIneShot(shot, expectedIneSide);
+        if (!outcome.ok) {
+          setIneRejection(REJECTION_MESSAGE[outcome.reason](expectedIneSide));
+          return;
+        }
+        result = outcome.scan;
+      } else {
+        result = await processDocumentShot(shot, flattenDocument);
+      }
 
       setCaptures((prev) => ({ ...prev, [currentSide]: result }));
       setIsReviewing(true);
     } finally {
       setIsProcessing(false);
     }
-  }, [currentSide, isIne, isProcessing, flattenDocument]);
+  }, [currentSide, expectedIneSide, isIne, isProcessing, flattenDocument]);
 
-  // Auto-captura INE cuando el marco está en verde y la tarjeta quieta (si la casilla está marcada)
+  // Auto-captura INE cuando el marco está en verde y la tarjeta quieta (si la casilla está marcada).
+  // Se pausa mientras se muestra un rechazo para no disparar en bucle sobre la misma tarjeta.
   const ineDetection = useIneAutoCapture({
-    enabled: permission.granted && isIneAutoCapture && !isReviewing && !isProcessing,
+    enabled:
+      permission.granted && isIneAutoCapture && !isReviewing && !isProcessing && !ineRejection,
     webcamRef,
     guideFrameRef,
     onAutoCapture: handleCapturePhoto,
-    expectedSide: currentSide === 'back' ? 'back' : 'front',
+    expectedSide: expectedIneSide,
     stableGoodNeeded: 3,
     intervalMs: 250,
   });
@@ -188,8 +226,19 @@ export function App() {
 
   // ========== Vista 3: Cámara ==========
   const frameTitle = isIne
-    ? `Rellena el marco con tu INE (${currentSide === 'front' ? 'FRENTE' : 'REVERSO'})`
+    ? `Encuadra tu INE (${currentSide === 'front' ? 'FRENTE' : 'REVERSO'}) en el recuadro`
     : 'Encuadra tu documento';
+
+  // Marco: rojo si el 2º análisis rechazó, verde mientras verifica, si no lo que diga el detector
+  const frameStatus: IneFitStatus | undefined = !isIne
+    ? undefined
+    : ineRejection
+      ? 'bad'
+      : isProcessing
+        ? 'good'
+        : isIneAutoCapture
+          ? ineDetection.fitStatus
+          : undefined;
 
   return (
     <CameraView webcamRef={webcamRef}>
@@ -198,18 +247,23 @@ export function App() {
       <GuideFrame
         kind={isIne ? 'ine' : 'document'}
         title={frameTitle}
-        detectionStatus={isIneAutoCapture ? ineDetection.fitStatus : undefined}
+        detectionStatus={frameStatus}
         frameRef={guideFrameRef}
       >
-        {isIneAutoCapture && (
-          <IneDetectionStatus
-            status={ineDetection.fitStatus}
-            message={ineDetection.fitMessage}
-            debug={ineDetection.fitDebug}
-            isProcessing={isProcessing}
-            isWarmingUp={ineDetection.isWarmingUp}
-            loadError={ineDetection.loadError}
-          />
+        {ineRejection ? (
+          <Notice tone="error" text={ineRejection} />
+        ) : isIne && isProcessing ? (
+          <Notice tone="info" text="Verificando INE…" />
+        ) : (
+          isIneAutoCapture && (
+            <IneDetectionStatus
+              status={ineDetection.fitStatus}
+              message={ineDetection.fitMessage}
+              debug={ineDetection.fitDebug}
+              isWarmingUp={ineDetection.isWarmingUp}
+              loadError={ineDetection.loadError}
+            />
+          )
         )}
       </GuideFrame>
 

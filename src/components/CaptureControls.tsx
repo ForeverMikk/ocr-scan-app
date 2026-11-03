@@ -99,7 +99,7 @@ export function CaptureControls({
         </div>
       </div>
 
-      <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>🔒 Conexión segura</p>
+      <p style={{ margin: 0, fontSize: 12, opacity: 0.85 }}>🔒 Tu información estará encriptada</p>
     </div>
   );
 }

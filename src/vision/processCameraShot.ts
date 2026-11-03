@@ -1,14 +1,14 @@
 /**
  * Convierte una foto de la cámara en la imagen final que se envía al OCR:
- *  - INE: recorta marco + margen y endereza la tarjeta (fallback: recorte del marco).
+ *  - INE: recorta marco + margen, endereza la tarjeta y la verifica (2º análisis).
  *  - Documento: recorta el marco y, si se pidió, lo aplana tipo Office Lens.
  */
 
 import { unprocessedScan, type ScanResult } from '../types/capture';
 import { flattenDocument } from './document/documentScanner';
 import { cropDataUrlToGuideFrame } from './guideFrame/cropToGuideFrame';
-import { extractIneFromDataUrl } from './ine/ineCameraAnalyzer';
-import { INE_DETECTION_PAD_RATIO } from './ine/ineCardDetector';
+import { extractAndVerifyIne } from './ine/ineCameraAnalyzer';
+import { INE_DETECTION_PAD_RATIO, type IneSide } from './ine/ineCardDetector';
 
 export interface CameraShot {
   /** Screenshot completo del video (data URL JPEG). */
@@ -17,11 +17,15 @@ export interface CameraShot {
   guideFrame: HTMLElement;
 }
 
-export const processIneShot = async ({
-  screenshot,
-  video,
-  guideFrame,
-}: CameraShot): Promise<ScanResult> => {
+export type IneShotResult =
+  | { ok: true; scan: ScanResult }
+  /** `notIne`: no hay tarjeta o no es INE. `wrongSide`: es INE pero del otro lado. */
+  | { ok: false; reason: 'notIne' | 'wrongSide' };
+
+export const processIneShot = async (
+  { screenshot, video, guideFrame }: CameraShot,
+  expectedSide: IneSide
+): Promise<IneShotResult> => {
   // Con margen: el detector necesita ver los 4 bordes de la tarjeta
   const paddedCrop = await cropDataUrlToGuideFrame(
     screenshot,
@@ -29,11 +33,16 @@ export const processIneShot = async ({
     guideFrame,
     INE_DETECTION_PAD_RATIO
   );
-  const card = await extractIneFromDataUrl(paddedCrop);
-  if (card) {
-    return { originalDataUrl: paddedCrop, processedDataUrl: card, wasPerspectiveCorrected: true };
-  }
-  return unprocessedScan(await cropDataUrlToGuideFrame(screenshot, video, guideFrame));
+  const card = await extractAndVerifyIne(paddedCrop);
+  console.info('[processIneShot] 2º análisis:', card?.verification ?? 'sin tarjeta');
+
+  if (!card?.verification.isIne) return { ok: false, reason: 'notIne' };
+  if (card.verification.side !== expectedSide) return { ok: false, reason: 'wrongSide' };
+
+  return {
+    ok: true,
+    scan: { originalDataUrl: paddedCrop, processedDataUrl: card.dataUrl, wasPerspectiveCorrected: true },
+  };
 };
 
 export const processDocumentShot = async (
