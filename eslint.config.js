@@ -19,11 +19,4 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
-  {
-    // Scripts de desarrollo que corren en Node (calibración del detector)
-    files: ['scripts/**/*.ts'],
-    languageOptions: {
-      globals: globals.node,
-    },
-  },
 ]);
