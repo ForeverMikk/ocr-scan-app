@@ -2,7 +2,10 @@ import type { CSSProperties, ReactNode, RefObject } from 'react';
 import Webcam from 'react-webcam';
 import { JPEG_QUALITY } from '../shared/image';
 
-/** Visor a pantalla completa: video de la cámara trasera + capas encima (`children`). */
+/**
+ * Visor a pantalla completa: video de la cámara trasera y una columna encima
+ * (header, marco, barra de controles) que cabe sin scroll.
+ */
 export function CameraView({
   webcamRef,
   children,
@@ -24,7 +27,7 @@ export function CameraView({
         }}
         style={styles.video}
       />
-      {children}
+      <div style={styles.overlay}>{children}</div>
     </div>
   );
 }
@@ -32,22 +35,27 @@ export function CameraView({
 const styles = {
   root: {
     position: 'relative',
-    width: '100vw',
-    height: '100vh',
+    width: '100%',
+    height: '100%',
     background: '#000',
     overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
     fontFamily: 'sans-serif',
     color: '#fff',
   },
   video: {
     position: 'absolute',
+    inset: 0,
     width: '100%',
     height: '100%',
-    // El recorte al marco compensa este `cover` (ver guideFrameGeometry)
     objectFit: 'cover',
+  },
+  overlay: {
+    position: 'absolute',
+    inset: 0,
+    zIndex: 10,
+    display: 'flex',
+    flexDirection: 'column',
+    minHeight: 0,
+    pointerEvents: 'none',
   },
 } satisfies Record<string, CSSProperties>;

@@ -5,9 +5,29 @@
  * junto con las capturas, la ubicación, el dispositivo y la telemetría.
  */
 
-import type { CaptureMap } from './capture';
-
 export type DocumentoLabel = 'INE' | 'Factura' | 'Comprobante';
+
+/**
+ * JPEG listo para el OCR: base64 puro, sin el prefijo `data:image/jpeg;base64,`.
+ * Se guardan las dos versiones de cada toma (recorte de cámara y tarjeta enderezada).
+ */
+export interface ApiImage {
+  original: string;
+  processed: string;
+}
+
+/** INE: las dos caras, cada una con original + procesada. */
+export interface IneCapturasPayload {
+  frente: ApiImage;
+  reverso: ApiImage;
+}
+
+/** Comprobante / Factura: una sola imagen. */
+export interface DocumentoCapturasPayload {
+  documento: ApiImage;
+}
+
+export type CapturasPayload = IneCapturasPayload | DocumentoCapturasPayload;
 
 /** Datos extraídos de la INE por el OCR. */
 export interface IneOcrData {
@@ -97,8 +117,8 @@ interface VerificationDataBase {
   dispositivo: DispositivoData;
   telemetria: TelemetriaData;
   localidad: string;
-  /** Imágenes confirmadas por el usuario (no viene en la referencia; las necesita el OCR). */
-  capturas: CaptureMap;
+  /** Imágenes confirmadas, en base64. INE lleva frente y reverso. */
+  capturas: CapturasPayload;
 }
 
 /** INE: incluye todos los campos de OCR. */

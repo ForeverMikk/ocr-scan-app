@@ -1,6 +1,9 @@
 import { collectDeviceSnapshot } from './deviceInfo';
-import type { CaptureMap, GeoLocationData } from '../types/capture';
+import { dataUrlToBase64 } from '../shared/image';
+import type { CaptureMap, GeoLocationData, ScanResult } from '../types/capture';
 import type {
+  ApiImage,
+  CapturasPayload,
   DocumentoLabel,
   GpsData,
   IneOcrData,
@@ -72,6 +75,23 @@ export interface BuildPayloadInput {
   capturas: CaptureMap;
 }
 
+const toApiImage = (scan: ScanResult): ApiImage => ({
+  original: dataUrlToBase64(scan.originalDataUrl),
+  processed: dataUrlToBase64(scan.processedDataUrl),
+});
+
+/** INE exige frente y reverso; el resto, una sola toma. */
+const toCapturasPayload = (documento: DocumentoLabel, capturas: CaptureMap): CapturasPayload => {
+  if (documento === 'INE') {
+    if (!capturas.front || !capturas.back) {
+      throw new Error('Faltan el frente o el reverso de la INE');
+    }
+    return { frente: toApiImage(capturas.front), reverso: toApiImage(capturas.back) };
+  }
+  if (!capturas.single) throw new Error('Falta la imagen del documento');
+  return { documento: toApiImage(capturas.single) };
+};
+
 export const buildVerificationPayload = async ({
   documento,
   geo,
@@ -86,7 +106,7 @@ export const buildVerificationPayload = async ({
     telemetria,
     // Viene del OCR (municipio del domicilio)
     localidad: '',
-    capturas,
+    capturas: toCapturasPayload(documento, capturas),
   };
 
   return {

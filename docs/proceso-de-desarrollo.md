@@ -1,7 +1,8 @@
 # Proceso de desarrollo · MF OCR (prueba de captura)
 
 Este documento cuenta cómo se llegó al estado actual de la prueba: desde la elección de
-librerías y los primeros problemas con la cámara, hasta el detector automático de la INE.
+librerías y los primeros problemas con la cámara, hasta el detector automático de la INE
+y el segundo análisis que confirma que la tarjeta capturada es realmente una INE.
 Está ordenado de lo más simple a lo más complejo, y en cada etapa se explica **qué se hizo,
 por qué, y qué problema resolvió**.
 
@@ -15,7 +16,9 @@ Validar, en el navegador del teléfono, que podemos:
    (Comprobante / Factura).
 2. Entregar una imagen **limpia** para el OCR: solo el documento, derecho y nítido.
 3. En la INE, **detectar automáticamente** cuándo la tarjeta está bien colocada y tomar la foto sola.
-4. Armar el **JSON** (payload) con la imagen, datos del dispositivo y telemetría, con la forma
+4. Tras la captura, **verificar** que sea una INE (y del lado correcto), no otra identificación
+   ni una tarjeta de colores.
+5. Armar el **JSON** (payload) con la imagen, datos del dispositivo y telemetría, con la forma
    que espera el backend de OCR.
 
 ---
@@ -340,25 +343,53 @@ puntaje es ≥ **0.65**.
 | Licencia | 0.34 |
 | Metro | 0.35 |
 
-Si es INE pero del otro lado (posible en disparo manual) se pide el lado correcto. Tras un
-rechazo, el aviso se muestra 2.5 s y la detección automática se pausa para no disparar en bucle
-sobre la misma tarjeta. La calibración ahora tiene **32/32 casos** (escenas + verificación).
+### 9b.1 Cómo se conecta en la app
 
-Limitación: las plantillas son del modelo de INE actual (el de las fotos). Modelos anteriores de
-credencial tienen otro diseño y serían rechazados; habría que agregar sus plantillas.
+Esto aplica igual al disparo **manual** y al **automático**:
+
+1. Foto → recorte del marco + 15 % (`processIneShot`).
+2. Se localiza y endereza la tarjeta (`extractAndVerifyIne` en `ineCameraAnalyzer.ts`).
+3. Se corre `verifyIneCard` contra las plantillas. Si venía de cabeza, la imagen final se gira 180°.
+4. Según el resultado:
+   - No es INE → aviso rojo **"No reconocimos una INE. Vuelve a intentarlo."** y se vuelve a la cámara.
+   - Es INE del otro lado → **"Esa es la parte de atrás. Muestra el FRENTE de tu INE."** (o al revés).
+   - Es INE del lado pedido → vista de revisión, y si era el frente se pide el reverso.
+
+Tras un rechazo, el aviso se muestra **2.5 s** y la detección automática se pausa (`enabled` exige
+`!ineRejection`) para no disparar en bucle sobre la misma tarjeta. Mientras corre el 2º análisis
+el marco queda verde con **"Verificando INE…"**.
+
+La calibración ahora tiene **32/32 casos** (22 escenas de la 1ª etapa + 10 del 2º análisis).
+No se calibra con la webcam de la PC: `npm run test:ine`.
+
+**Qué revisar al probar en el teléfono**
+- Poca luz: con la INE a 60 % de brillo, `papel` marcó 0.43 (el mínimo es 0.35). Si en un lugar
+  oscuro no se pone verde, la línea de métricas en `npm run dev` muestra `papel`.
+- Mucha inclinación: con perspectiva fuerte simulada el 2º análisis bajó a 0.70 (el mínimo es 0.65).
+  Las fotos reales dieron 0.84.
+- Modelos anteriores de INE: las plantillas son del modelo actual (el de las fotos). Un diseño
+  anterior se rechazaría; habría que agregar sus plantillas.
 
 ---
 
 ## 10. Interfaz final de captura
 
+Textos alineados con el flujo del OCR de la empresa (sin el pantallazo de "ten la INE a la mano"
+ni el botón "Escanear", que no eran prioridad):
+
+- Título del marco INE: **"Encuadra tu INE (FRENTE|REVERSO) en el recuadro"**.
+- Pie de la cámara: **"🔒 Tu información estará encriptada"**.
 - **Casilla "Detección automática"** (solo INE) sobre el obturador:
   - Marcada → el detector trabaja, el marco cambia a verde/rojo con mensajes y el obturador queda
     **deshabilitado**.
   - Desmarcada → disparo manual. Comprobante y Factura siempre son manuales.
 - **Obturador** como el de las apps de cámara: aro blanco con disco blanco, sin texto; el disco se
   encoge al presionar.
+- Tras disparar (manual o auto), el marco queda verde con **"Verificando INE…"** mientras corre el
+  2º análisis. Si se rechaza, aparece el aviso rojo 2.5 s (`Notice` en `components/Notice.tsx`).
 - En modo desarrollo (`npm run dev`) se muestra bajo el marco una línea con las métricas del
-  detector (dentro, cubre, proporción, nitidez, textura) para ajustar umbrales en el teléfono.
+  detector (dentro, cubre, proporción, nitidez, textura, **papel**) para ajustar umbrales en el
+  teléfono.
 
 ---
 
@@ -366,8 +397,8 @@ credencial tienen otro diseño y serían rechazados; habría que agregar sus pla
 
 ```
 src/
-  App.tsx       Flujo: permiso → cámara → revisión → payload (solo estado y conexiones)
-  components/   Pantallas y piezas de la UI (marco, controles, obturador, revisión…)
+  App.tsx       Flujo: permiso → cámara → (verificar INE) → revisión → payload
+  components/   Pantallas y piezas de la UI (marco, controles, Notice, obturador, revisión…)
   hooks/        useCameraPermission, useIneAutoCapture
   vision/
     loaders/    Carga de OpenCV y jscanify
@@ -410,5 +441,7 @@ scripts/test-ine-detector.ts   Calibración en Node
 - Leer el tipo de documento desde los query params (`?id=1|2|3`).
 - Probar en más teléfonos y condiciones de luz; si algún caso falla, la línea de métricas en modo
   desarrollo indica qué umbral ajustar (se calibra con `npm run test:ine`).
+- Si hay que aceptar modelos anteriores de credencial, agregar plantillas en
+  `src/vision/ine/templates/` y ampliar `ineVerifier.ts`.
 - `index.css` conserva estilos globales de la plantilla de Vite (ancho de `#root`, tamaños de
   letra); se pueden limpiar cuando se defina el diseño final.

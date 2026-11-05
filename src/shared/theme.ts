@@ -39,15 +39,17 @@ export const buttonStyles = {
   },
 } satisfies Record<string, CSSProperties>;
 
-/** Vista a pantalla completa con fondo oscuro y contenido centrado. */
+/** Vista a pantalla completa con fondo oscuro y contenido centrado (sin scroll). */
 export const fullScreenCentered: CSSProperties = {
-  minHeight: '100vh',
+  height: '100%',
   background: COLORS.background,
   color: '#fff',
   display: 'flex',
   flexDirection: 'column',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 20,
+  padding: '20px max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left))',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
   fontFamily: 'sans-serif',
 };

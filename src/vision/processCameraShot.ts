@@ -5,7 +5,7 @@
  */
 
 import { unprocessedScan, type ScanResult } from '../types/capture';
-import { flattenDocument } from './document/documentScanner';
+import { DOCUMENT_DETECTION_PAD_RATIO, flattenDocument } from './document/documentScanner';
 import { cropDataUrlToGuideFrame } from './guideFrame/cropToGuideFrame';
 import { extractAndVerifyIne } from './ine/ineCameraAnalyzer';
 import { INE_DETECTION_PAD_RATIO, type IneSide } from './ine/ineCardDetector';
@@ -50,5 +50,15 @@ export const processDocumentShot = async (
   flatten: boolean
 ): Promise<ScanResult> => {
   const frameCrop = await cropDataUrlToGuideFrame(screenshot, video, guideFrame);
-  return flatten ? flattenDocument(frameCrop) : unprocessedScan(frameCrop);
+  if (!flatten) return unprocessedScan(frameCrop);
+
+  // Con margen: si se recorta justo al marco, los bordes de la hoja desaparecen y el
+  // aplanado estira cualquier trazo interno (efecto cortina).
+  const paddedCrop = await cropDataUrlToGuideFrame(
+    screenshot,
+    video,
+    guideFrame,
+    DOCUMENT_DETECTION_PAD_RATIO
+  );
+  return flattenDocument(paddedCrop, frameCrop);
 };

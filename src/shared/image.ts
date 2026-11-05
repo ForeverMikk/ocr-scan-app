@@ -16,6 +16,15 @@ export const loadImage = (dataUrl: string): Promise<HTMLImageElement> =>
 export const canvasToJpeg = (canvas: HTMLCanvasElement): string =>
   canvas.toDataURL('image/jpeg', JPEG_QUALITY);
 
+/**
+ * Data URL (`data:image/jpeg;base64,XXXX`) → solo el base64 (`XXXX`).
+ * Si ya viene sin prefijo, se deja igual.
+ */
+export const dataUrlToBase64 = (dataUrl: string): string => {
+  const comma = dataUrl.indexOf(',');
+  return comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
+};
+
 /** Lee un archivo seleccionado por el usuario como data URL. */
 export const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {

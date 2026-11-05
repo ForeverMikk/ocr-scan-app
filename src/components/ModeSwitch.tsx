@@ -7,7 +7,7 @@ const OPTIONS: { mode: CaptureMode; label: string }[] = [
   { mode: 'documento', label: 'Documento' },
 ];
 
-/** Switch fijo arriba-izquierda: INE ↔ Documento (sustituye los query params por ahora). */
+/** Switch INE ↔ Documento (sustituye los query params por ahora). */
 export function ModeSwitch({
   mode,
   onChange,
@@ -37,16 +37,17 @@ export function ModeSwitch({
 
 const styles = {
   root: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
+    flexShrink: 0,
+    alignSelf: 'flex-start',
     zIndex: 30,
     display: 'flex',
     gap: 4,
+    margin: 'max(8px, env(safe-area-inset-top)) 12px 4px',
     padding: 4,
     borderRadius: 10,
     background: 'rgba(0,0,0,0.65)',
     border: '1px solid rgba(255,255,255,0.15)',
+    pointerEvents: 'auto',
   },
   button: {
     border: 'none',

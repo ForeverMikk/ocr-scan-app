@@ -134,6 +134,7 @@ export function App() {
         result = await processDocumentShot(shot, flattenDocument);
       }
 
+      // Se conserva el otro lado: al tomar el reverso el frente no se borra
       setCaptures((prev) => ({ ...prev, [currentSide]: result }));
       setIsReviewing(true);
     } finally {
@@ -179,16 +180,25 @@ export function App() {
       return;
     }
 
+    if (isIne && (!captures.front || !captures.back)) {
+      alert('Falta capturar el frente o el reverso de la INE.');
+      return;
+    }
+
     // ids listos para ?id=1|2|3; por ahora el tipo viene del switch
     const catalogEntry = DOCUMENT_CATALOG[documentIdForMode(captureMode)];
-    const payload = await buildVerificationPayload({
-      documento: catalogEntry.label,
-      geo: permission.geoData, // null mientras la geolocalización siga comentada → gpsData: null
-      capturas: captures,
-    });
-
-    await submitVerification(payload);
-    alert('Flujo completado (Simulación Mock). Revisa la consola para ver el JSON generado.');
+    try {
+      const payload = await buildVerificationPayload({
+        documento: catalogEntry.label,
+        geo: permission.geoData, // null mientras la geolocalización siga comentada → gpsData: null
+        capturas: captures,
+      });
+      await submitVerification(payload);
+      alert('Flujo completado. Revisa la consola para ver el resumen del payload.');
+    } catch (error) {
+      console.error('[App] No se pudo armar o enviar el payload:', error);
+      alert('No se pudo enviar al OCR. Revisa la consola.');
+    }
   };
 
   // ========== Vista 1: Permisos ==========
@@ -208,7 +218,15 @@ export function App() {
   const activeCapture = captures[currentSide];
   if (isReviewing && activeCapture) {
     return (
-      <div style={{ position: 'relative' }}>
+      <div
+        style={{
+          height: '100%',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#121316',
+        }}
+      >
         {modeSwitch}
         <ReviewView
           title={SIDE_LABEL[currentSide]}
@@ -252,8 +270,11 @@ export function App() {
       >
         {ineRejection ? (
           <Notice tone="error" text={ineRejection} />
-        ) : isIne && isProcessing ? (
-          <Notice tone="info" text="Verificando INE…" />
+        ) : isProcessing ? (
+          <Notice
+            tone="info"
+            text={isIne ? 'Verificando INE…' : flattenDocument ? 'Aplanando documento…' : 'Procesando…'}
+          />
         ) : (
           isIneAutoCapture && (
             <IneDetectionStatus

@@ -106,17 +106,17 @@ export function CaptureControls({
 
 const styles = {
   bar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flexShrink: 0,
     zIndex: 20,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 12,
-    padding: '16px 16px calc(20px + env(safe-area-inset-bottom))',
+    gap: 8,
+    width: '100%',
+    padding: '8px 12px max(10px, env(safe-area-inset-bottom))',
+    boxSizing: 'border-box',
     background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0))',
+    pointerEvents: 'auto',
   },
   toggle: {
     fontSize: 13,
@@ -141,6 +141,8 @@ const styles = {
     fontWeight: 600,
     fontSize: 13,
     cursor: 'pointer',
-    whiteSpace: 'nowrap',
+    whiteSpace: 'normal',
+    textAlign: 'center',
+    lineHeight: 1.2,
   },
 } satisfies Record<string, CSSProperties>;
