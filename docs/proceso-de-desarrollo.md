@@ -1,10 +1,10 @@
 # Proceso de desarrollo · MF OCR (prueba de captura)
 
 Este documento cuenta cómo se llegó al estado actual de la prueba: desde la elección de
-librerías y los primeros problemas con la cámara, hasta el detector automático de la INE
-y el segundo análisis que confirma que la tarjeta capturada es realmente una INE.
-Está ordenado de lo más simple a lo más complejo, y en cada etapa se explica **qué se hizo,
-por qué, y qué problema resolvió**.
+librerías y los primeros problemas con la cámara, hasta el detector de la INE y la lectura
+con el API de OCR. Está ordenado de lo más simple a lo más complejo, y en cada etapa se
+explica **qué se hizo, por qué, y qué problema resolvió**. El flujo que corre hoy está en
+la sección 13.
 
 ---
 
@@ -16,10 +16,10 @@ Validar, en el navegador del teléfono, que podemos:
    (Comprobante / Factura).
 2. Entregar una imagen **limpia** para el OCR: solo el documento, derecho y nítido.
 3. En la INE, **detectar automáticamente** cuándo la tarjeta está bien colocada y tomar la foto sola.
-4. Tras la captura, **verificar** que sea una INE (y del lado correcto), no otra identificación
-   ni una tarjeta de colores.
-5. Armar el **JSON** (payload) con la imagen, datos del dispositivo y telemetría, con la forma
-   que espera el backend de OCR.
+4. Mandar esa imagen al **API de OCR** y, con el texto que regresa, decidir si es INE,
+   comprobante o factura.
+5. Armar el **JSON** final según el documento, con la imagen, el texto leído, el dispositivo
+   y la telemetría. Ese JSON se guarda en el navegador; no se vuelve a enviar al OCR.
 
 ---
 
@@ -86,26 +86,27 @@ OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregaron dos
 ## 5. Modos de captura y payload
 
 ### 5.1 INE vs Documento
-- Un **switch arriba a la izquierda** elige INE o Documento (sustituye a los query params por ahora).
-- El catálogo `DOCUMENT_CATALOG` ya tiene los ids pensados para el futuro:
-  `1 = INE`, `2 = Comprobante`, `3 = Factura`. Comprobante y Factura comparten la misma interfaz;
-  solo cambia el JSON.
-- **INE:** marco horizontal con la proporción oficial ID-1 (85.6 × 54 mm ≈ 1.586), frente → reverso.
-- **Documento:** marco vertical, disparo manual, casilla de **aplanado** (jscanify) y opción de
-  **subir imagen o PDF**.
+- Un **switch arriba a la izquierda** elige el encuadre: **INE** (tarjeta) o **Doc** (hoja).
+  No decide el tipo de documento: eso lo hace el texto del OCR (sección 13).
+- El catálogo `DOCUMENT_CATALOG` conserva los ids `1 = INE`, `2 = Comprobante`, `3 = Factura`.
+- **INE:** marco horizontal con la proporción oficial ID-1 (85.6 × 54 mm ≈ 1.586). Si el texto
+  es una credencial, después se pide el reverso con el mismo marco.
+- **Doc:** marco vertical y casilla de **aplanado** (jscanify).
+- En los dos modos se puede **subir imagen** (JPG, PNG o WEBP). El OCR no lee PDF.
 
 ### 5.2 Payload (`payload/`)
 Se adaptó al objeto de referencia del backend:
 
 ```
 { success, message, data: {
-    Documento, motorocr,
-    ...campos de OCR de la INE (vacíos: los llena el backend),
-    gpsData,        // null mientras la geolocalización esté comentada
-    dispositivo,    // hash, sistema operativo, navegador, tipo WEBAPP
-    telemetria,     // modelo, red, GPU, núcleos, memoria, resolución…
+    Documento,          // "INE" | "Comprobante" | "Factura"
+    motorocr,
+    ...campos leídos del texto del OCR (distintos según el documento),
+    gpsData,            // null mientras la geolocalización esté comentada
+    dispositivo,        // hash, sistema operativo, navegador, tipo WEBAPP
+    telemetria,         // modelo, red, GPU, núcleos, memoria, resolución…
     localidad,
-    capturas        // imágenes confirmadas por el usuario
+    capturas            // imágenes confirmadas, en base64 sin prefijo data:
 } }
 ```
 
@@ -113,8 +114,11 @@ Se adaptó al objeto de referencia del backend:
   (`userAgentData` en Chrome/Android), GPU vía WebGL, tipo y velocidad de red estimada, núcleos y
   memoria. Donde el navegador no da el dato (por ejemplo Safari), queda vacío en lugar de fallar.
 - El **hash del dispositivo** es un SHA-256 (truncado a 32 caracteres) de rasgos estables del equipo.
-- La **IP** no se puede conocer desde el navegador; la asigna el backend.
-- `submitVerification.ts` es el único punto donde irá la llamada a la API (hoy solo imprime en consola).
+- La **IP** no se puede conocer desde el navegador; queda para quien consuma el JSON.
+- `submitVerification.ts` **no** hace `POST` del JSON grande. Lo imprime en consola (sin los
+  base64) y lo guarda en `localStorage` con la clave `mf-ocr.payload`. Si las fotos no caben,
+  guarda el mismo resumen con el tamaño de cada imagen. El texto crudo del OCR va aparte, en
+  `mf-ocr.session`.
 
 ---
 
@@ -343,24 +347,16 @@ puntaje es ≥ **0.65**.
 | Licencia | 0.34 |
 | Metro | 0.35 |
 
-### 9b.1 Cómo se conecta en la app
+### 9b.1 Qué quedó de esto en la app
 
-Esto aplica igual al disparo **manual** y al **automático**:
+El verificador de plantillas sigue en el código y en `npm run test:ine` (32/32 casos), pero **ya
+no es la puerta de la captura**. El API de OCR no dice qué documento es: devuelve el texto de
+cualquier imagen. Por eso una licencia o un comprobante tienen que llegar al API, y el tipo se
+decide después (sección 13).
 
-1. Foto → recorte del marco + 15 % (`processIneShot`).
-2. Se localiza y endereza la tarjeta (`extractAndVerifyIne` en `ineCameraAnalyzer.ts`).
-3. Se corre `verifyIneCard` contra las plantillas. Si venía de cabeza, la imagen final se gira 180°.
-4. Según el resultado:
-   - No es INE → aviso rojo **"No reconocimos una INE. Vuelve a intentarlo."** y se vuelve a la cámara.
-   - Es INE del otro lado → **"Esa es la parte de atrás. Muestra el FRENTE de tu INE."** (o al revés).
-   - Es INE del lado pedido → vista de revisión, y si era el frente se pide el reverso.
-
-Tras un rechazo, el aviso se muestra **2.5 s** y la detección automática se pausa (`enabled` exige
-`!ineRejection`) para no disparar en bucle sobre la misma tarjeta. Mientras corre el 2º análisis
-el marco queda verde con **"Verificando INE…"**.
-
-La calibración ahora tiene **32/32 casos** (22 escenas de la 1ª etapa + 10 del 2º análisis).
-No se calibra con la webcam de la PC: `npm run test:ine`.
+Al tomar la foto en modo tarjeta, `processIdentificationShot` recorta el marco, endereza la
+tarjeta si la encuentra y, si no, deja el recorte. No rechaza por “no es INE”. El aplanado de
+hoja sigue en `processDocumentShot`.
 
 **Qué revisar al probar en el teléfono**
 - Poca luz: con la INE a 60 % de brillo, `papel` marcó 0.43 (el mínimo es 0.35). Si en un lugar
@@ -372,24 +368,25 @@ No se calibra con la webcam de la PC: `npm run test:ine`.
 
 ---
 
-## 10. Interfaz final de captura
+## 10. Interfaz de captura
 
-Textos alineados con el flujo del OCR de la empresa (sin el pantallazo de "ten la INE a la mano"
-ni el botón "Escanear", que no eran prioridad):
-
-- Título del marco INE: **"Encuadra tu INE (FRENTE|REVERSO) en el recuadro"**.
+- Switch **INE / Doc**. El título queda arriba, junto a esos botones:
+  **"Encuadra la identificación"**, **"Encuadra el REVERSO de la INE"** o
+  **"Encuadra el comprobante o la factura"**. El alto del título está reservado para que un
+  texto más largo no mueva el marco.
+- El sombreado oscuro cubre toda la pantalla **menos** el rectángulo de captura. Antes el
+  `box-shadow` del marco se recortaba y solo oscurecía un rectángulo interior.
 - Pie de la cámara: **"🔒 Tu información estará encriptada"**.
-- **Casilla "Detección automática"** (solo INE) sobre el obturador:
-  - Marcada → el detector trabaja, el marco cambia a verde/rojo con mensajes y el obturador queda
-    **deshabilitado**.
-  - Desmarcada → disparo manual. Comprobante y Factura siempre son manuales.
-- **Obturador** como el de las apps de cámara: aro blanco con disco blanco, sin texto; el disco se
-  encoge al presionar.
-- Tras disparar (manual o auto), el marco queda verde con **"Verificando INE…"** mientras corre el
-  2º análisis. Si se rechaza, aparece el aviso rojo 2.5 s (`Notice` en `components/Notice.tsx`).
-- En modo desarrollo (`npm run dev`) se muestra bajo el marco una línea con las métricas del
-  detector (dentro, cubre, proporción, nitidez, textura, **papel**) para ajustar umbrales en el
-  teléfono.
+- **Casilla "Detección automática"** (solo con el marco de tarjeta):
+  - Marcada → el detector trabaja y el obturador queda **deshabilitado**, salvo que haya un error
+    visible.
+  - Desmarcada → disparo manual. El marco de hoja siempre es manual y muestra la casilla de aplanado.
+- **Obturador** como el de las apps de cámara, y botón **Subir imagen** en los dos modos.
+- Tras la foto, **Revisar**: **Repetir toma** no gasta intento; **Leer documento** o
+  **Leer reverso** llama al OCR. Un aviso de error o de “Preparando…” flota sobre la cámara y
+  no empuja el marco. Si se agotan los 3 intentos, el botón pasa a **Empezar de nuevo**.
+- Con la detección automática, en desarrollo se pueden ver las métricas del detector
+  (dentro, cubre, proporción, nitidez, textura, papel).
 
 ---
 
@@ -397,19 +394,18 @@ ni el botón "Escanear", que no eran prioridad):
 
 ```
 src/
-  App.tsx       Flujo: permiso → cámara → (verificar INE) → revisión → payload
-  components/   Pantallas y piezas de la UI (marco, controles, Notice, obturador, revisión…)
+  App.tsx       Flujo: permiso → cámara → revisión → OCR → clasificar → payload
+  components/   Marco, controles, Notice, revisión, resultado
   hooks/        useCameraPermission, useIneAutoCapture
-  vision/
-    loaders/    Carga de OpenCV y jscanify
-    ine/        ineCardDetector + ineVerifier (núcleo puro), ineCameraAnalyzer (navegador), templates/
-    document/   Aplanado de documentos (jscanify)
-    guideFrame/ Mapeo marco ↔ video y recorte
-    processCameraShot.ts   Foto → imagen final
-  payload/      deviceInfo, payloadBuilder, submitVerification
+  vision/       OpenCV: encuadre, aplanado, recorte. processIdentificationShot no rechaza
+  ocr/          ocrClient (POST { image }) y classifyDocument (texto → tipo)
+  flow/         decideCapture: reverso, listo o reintento (3 por etapa)
+  session/      Texto del OCR en localStorage (mf-ocr.session)
+  payload/      deviceInfo, payloadBuilder, submitVerification (mf-ocr.payload)
   shared/       Utilidades de imagen y colores
-  types/        Tipos compartidos
-scripts/test-ine-detector.ts   Calibración en Node
+  types/        Tipos compartidos, incluido el JSON por documento
+scripts/test-ine-detector.ts    Calibración del detector en Node
+scripts/test-ocr-classify.ts    Clasificación contra lecturas reales del OCR
 ```
 
 ---
@@ -430,18 +426,97 @@ scripts/test-ine-detector.ts   Calibración en Node
 | Fotos borrosas, con reflejo o del lado equivocado | Métricas de calidad sobre la tarjeta enderezada |
 | Disparo con la mano en movimiento | Estabilidad de esquinas entre cuadros |
 | Imposible probar con la webcam de la PC | Calibración en Node con fotos reales |
-| Metro y licencia detectadas como INE | 1ª etapa por fondo claro tipo identificación + 2ª etapa por zonas impresas de la INE |
+| Metro y licencia detectadas como INE | El detector de plantillas las distingue en calibración; en la app el rechazo lo hace el texto del OCR |
+| El navegador no podía llamar al OCR (CORS, OPTIONS 405) | En `npm run dev`, proxy de Vite: `/ocr-api/` → el host de `VITE_OCR_API_URL` |
+| Un `.js` viejo junto al `.ts` seguía llamando al API directo | Se eliminaron esos `.js`; Vite resuelve `.js` antes que `.ts` |
+| El sombreado solo cubría un rectángulo interior | El oscurecido se mide sobre el marco y cubre el resto de la pantalla |
+| Avisos y títulos movían el marco | El título reserva su alto; los avisos flotan y no entran en el flex |
 
 ---
 
-## 13. Pendientes y siguientes pasos
+## 13. Lectura con el API de OCR
 
-- Conectar `submitVerification` con la API de OCR real.
+El contrato del API es un solo `POST`:
+
+```
+POST {VITE_OCR_API_URL}
+Authorization: Bearer {token}
+accept: */*
+Content-Type: application/json
+
+{ "image": "<base64 del JPEG, sin el prefijo data:image/...;base64,>" }
+```
+
+La respuesta usada es `{ "status": "ok", "resultado": "<texto>" }`. El API **no valida** el
+tipo de documento: extrae el texto de la imagen que sea. Un 401 es token rechazado. Un 422 es
+el cuerpo mal formado. El preflight `OPTIONS` del navegador responde **405** y no manda
+`Access-Control-Allow-Origin`, así que un `fetch` directo desde `https://localhost:3015` falla
+con `Failed to fetch` aunque Postman funcione.
+
+### 13.1 Proxy solo en desarrollo
+
+`VITE_OCR_API_URL` y `VITE_OCR_API_TOKEN` viven en `.env.local` (git lo ignora con `*.local`).
+`.env.example` documenta los nombres, sin token.
+
+Con `import.meta.env.DEV`, `ocr/ocrClient.ts` llama a `/ocr-api/`. `vite.config.ts` reenvía esa
+ruta al origen y al path de `VITE_OCR_API_URL`, con los mismos headers y el mismo cuerpo. Hay
+que **reiniciar** `npm run dev` al cambiar el env o el proxy.
+
+Ese proxy no existe en un build de producción. Ahí el navegador usaría `VITE_OCR_API_URL`
+directo y el 405 volvería, salvo que el API permita el origen o haya un backend que reenvíe.
+
+### 13.2 Cuándo se llama
+
+La foto o el archivo solo abren la revisión. **Repetir toma** no llama al API y no gasta intento.
+**Leer documento** (o **Leer reverso**) manda el base64 de la imagen procesada. Cada etapa tiene
+**3 intentos**, sea foto o archivo. Un error de red o de token no gasta intento y se queda en
+la revisión.
+
+| Texto del OCR | En el primer paso | En el reverso de la INE |
+| --- | --- | --- |
+| Frente de INE | Pide el reverso y reinicia los intentos | “Ese es el frente…” |
+| Reverso de INE (`IDMEX`) | “Primero captura el frente…” | Arma el JSON de INE |
+| Comprobante (CFE, Telmex, recibo…) | JSON de comprobante | Pide repetir el reverso |
+| Factura (`FACTURA`, CFDI, folio fiscal o UUID) | JSON de factura | Pide repetir el reverso |
+| Licencia u otro texto | Pide repetir. Al 3.º intento, **Empezar de nuevo** | Igual, con el mensaje de reverso |
+
+El orden de `classifyDocument.ts` importa: el frente de la INE se reconoce antes que el reverso,
+la factura antes que el comprobante (un recibo dice “FACTURADO”, y eso no debe contar como
+factura), y un RFC suelto no convierte un recibo de CFE en factura.
+
+Las reglas se probaron con las lecturas reales (frente y reverso de INE, licencia, tarjeta del
+metro que devolvió `VP`, recibo de CFE y una factura de ejemplo que no es CFDI) en
+`scripts/test-ocr-classify.ts`.
+
+### 13.3 Qué se guarda en el JSON
+
+Las fotos se quedan en memoria hasta armar el payload. El texto crudo va a `mf-ocr.session`.
+
+- **INE:** campos de la credencial (nombre, CURP, clave de elector, domicilio, vigencia, CIC,
+  MRZ…). El reverso completa huecos y no pisa lo que el frente ya leyó. `textoOcrFrente` y
+  `textoOcrReverso`. Capturas `frente` y `reverso`, cada una con `original` y `processed`.
+- **Comprobante:** proveedor, titular, dirección, total, número de servicio, RFC, límite de pago
+  y periodo. `textoOcr`. Una sola captura `documento`.
+- **Factura:** tipo, emisor, receptor, RFC, folio, fecha, total y UUID si el texto lo trae.
+  El ejemplo probado no es un CFDI mexicano; el UUID y los RFC quedan listos para uno real.
+  `textoOcr`. Una sola captura `documento`.
+
+La pantalla de resultado muestra un resumen. El JSON completo está en la consola y en
+`localStorage` (`mf-ocr.payload`).
+
+---
+
+## 14. Pendientes y siguientes pasos
+
+- En producción, un backend (o CORS en el API) tiene que reemplazar el proxy de Vite.
+- Afinar el parseo de factura con un CFDI real; el de ejemplo no lo es.
 - Reactivar la geolocalización para producción móvil.
-- Leer el tipo de documento desde los query params (`?id=1|2|3`).
-- Probar en más teléfonos y condiciones de luz; si algún caso falla, la línea de métricas en modo
-  desarrollo indica qué umbral ajustar (se calibra con `npm run test:ine`).
-- Si hay que aceptar modelos anteriores de credencial, agregar plantillas en
-  `src/vision/ine/templates/` y ampliar `ineVerifier.ts`.
+- Leer un id inicial desde los query params (`?id=1|2|3`), si hace falta. El tipo final sigue
+  saliendo del texto del OCR.
+- Probar en más teléfonos y condiciones de luz. El detector de encuadre se calibra con
+  `npm run test:ine`.
+- Si hay que aceptar modelos anteriores de credencial en la detección automática, agregar
+  plantillas en `src/vision/ine/templates/`. La clasificación por texto no depende de esas
+  plantillas.
 - `index.css` conserva estilos globales de la plantilla de Vite (ancho de `#root`, tamaños de
   letra); se pueden limpiar cuando se defina el diseño final.
