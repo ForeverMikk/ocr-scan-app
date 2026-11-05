@@ -1,6 +1,6 @@
 /**
  * Convierte una foto de la cámara en la imagen final que se envía al OCR:
- *  - INE: recorta marco + margen, endereza la tarjeta y la verifica (2º análisis).
+ *  - Identificación: recorta y endereza la tarjeta, sin decidir todavía si es INE.
  *  - Documento: recorta el marco y, si se pidió, lo aplana tipo Office Lens.
  */
 
@@ -42,6 +42,33 @@ export const processIneShot = async (
   return {
     ok: true,
     scan: { originalDataUrl: paddedCrop, processedDataUrl: card.dataUrl, wasPerspectiveCorrected: true },
+  };
+};
+
+/**
+ * Encuadre de identificación: endereza la tarjeta si la encuentra.
+ * No rechaza licencias ni otros plásticos: el texto del OCR decide el tipo.
+ * Sin tarjeta, se envía el recorte del marco.
+ */
+export const processIdentificationShot = async ({
+  screenshot,
+  video,
+  guideFrame,
+}: CameraShot): Promise<ScanResult> => {
+  const paddedCrop = await cropDataUrlToGuideFrame(
+    screenshot,
+    video,
+    guideFrame,
+    INE_DETECTION_PAD_RATIO
+  );
+  const frameCrop = await cropDataUrlToGuideFrame(screenshot, video, guideFrame);
+  const card = await extractAndVerifyIne(paddedCrop);
+  console.info('[processIdentificationShot] tarjeta:', card?.verification ?? 'sin tarjeta; se usa el recorte');
+  if (!card) return unprocessedScan(frameCrop);
+  return {
+    originalDataUrl: frameCrop,
+    processedDataUrl: card.dataUrl,
+    wasPerspectiveCorrected: true,
   };
 };
 

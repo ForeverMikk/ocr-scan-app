@@ -4,7 +4,9 @@ import type { CaptureMap, GeoLocationData, ScanResult } from '../types/capture';
 import type {
   ApiImage,
   CapturasPayload,
+  ComprobanteOcrData,
   DocumentoLabel,
+  FacturaOcrData,
   GpsData,
   IneOcrData,
   VerificationPayload,
@@ -12,38 +14,6 @@ import type {
 
 /** Motor OCR a usar (el backend define el catálogo). */
 const MOTOR_OCR = '1';
-
-/** Plantilla vacía de la INE: el OCR la completa al procesar las capturas. */
-const EMPTY_INE_OCR: IneOcrData = {
-  nombre: '',
-  nombre2: '',
-  nombreCompleto: '',
-  apellidoPaterno: '',
-  apellidoMaterno: '',
-  nombres: '',
-  direccion: '',
-  calle: '',
-  codigoPostal: '',
-  estado: '',
-  municipio: '',
-  codigoPais: '',
-  colonia: '',
-  numeroExterior: '',
-  numeroInterior: '',
-  codigoEstado: '',
-  calleNombre: '',
-  curp: '',
-  claveElector: '',
-  cic: '',
-  folio: '',
-  sexo: '',
-  annoEmision: '',
-  numeroEmision: '',
-  annoRegistro: '',
-  fechaExpiracion: '',
-  fechaNacimiento: '',
-  mrz: '',
-};
 
 /**
  * El navegador solo da coordenadas; la dirección (geocodificación inversa) y la
@@ -73,6 +43,10 @@ export interface BuildPayloadInput {
   /** null mientras la geolocalización siga desactivada. */
   geo: GeoLocationData | null;
   capturas: CaptureMap;
+  /** INE ya fusionada (frente + reverso) y los textos crudos de cada cara. */
+  ine?: { ocr: IneOcrData; textoOcrFrente: string; textoOcrReverso: string };
+  comprobante?: ComprobanteOcrData;
+  factura?: FacturaOcrData;
 }
 
 const toApiImage = (scan: ScanResult): ApiImage => ({
@@ -96,25 +70,56 @@ export const buildVerificationPayload = async ({
   documento,
   geo,
   capturas,
+  ine,
+  comprobante,
+  factura,
 }: BuildPayloadInput): Promise<VerificationPayload> => {
   const { dispositivo, telemetria } = await collectDeviceSnapshot();
+
+  const localidad =
+    documento === 'INE'
+      ? (ine?.ocr.municipio ?? '')
+      : documento === 'Comprobante'
+        ? (comprobante?.localidad ?? '')
+        : '';
 
   const base = {
     motorocr: MOTOR_OCR,
     gpsData: buildGpsData(geo),
     dispositivo,
     telemetria,
-    // Viene del OCR (municipio del domicilio)
-    localidad: '',
+    localidad,
     capturas: toCapturasPayload(documento, capturas),
   };
 
+  if (documento === 'INE') {
+    if (!ine) throw new Error('Falta la lectura de la INE');
+    return {
+      success: true,
+      message: 'Información obtenida',
+      data: {
+        Documento: 'INE',
+        ...ine.ocr,
+        textoOcrFrente: ine.textoOcrFrente,
+        textoOcrReverso: ine.textoOcrReverso,
+        ...base,
+      },
+    };
+  }
+
+  if (documento === 'Comprobante') {
+    if (!comprobante) throw new Error('Falta la lectura del comprobante');
+    return {
+      success: true,
+      message: 'Información obtenida',
+      data: { Documento: 'Comprobante', ...comprobante, ...base },
+    };
+  }
+
+  if (!factura) throw new Error('Falta la lectura de la factura');
   return {
     success: true,
     message: 'Información obtenida',
-    data:
-      documento === 'INE'
-        ? { Documento: 'INE', ...EMPTY_INE_OCR, ...base }
-        : { Documento: documento, ...base },
+    data: { Documento: 'Factura', ...factura, ...base },
   };
 };

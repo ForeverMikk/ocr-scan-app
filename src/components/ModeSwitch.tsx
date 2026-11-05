@@ -1,13 +1,16 @@
-import type { CSSProperties } from 'react';
-import { COLORS } from '../shared/theme';
-import type { CaptureMode } from '../types/capture';
+import type { CSSProperties } from "react";
+import type { CaptureMode } from "../types/capture";
+import { COLORS } from "../shared/theme";
 
 const OPTIONS: { mode: CaptureMode; label: string }[] = [
-  { mode: 'ine', label: 'INE' },
-  { mode: 'documento', label: 'Documento' },
+  { mode: "ine", label: "INE" },
+  { mode: "documento", label: "Doc" },
 ];
 
-/** Switch INE ↔ Documento (sustituye los query params por ahora). */
+/**
+ * Solo cambia el encuadre (tarjeta o hoja).
+ * Si es INE, comprobante o factura lo decide el texto del OCR.
+ */
 export function ModeSwitch({
   mode,
   onChange,
@@ -25,7 +28,7 @@ export function ModeSwitch({
           onClick={() => onChange(option.mode)}
           style={{
             ...styles.button,
-            background: mode === option.mode ? COLORS.brand : 'transparent',
+            background: mode === option.mode ? COLORS.brand : "transparent",
           }}
         >
           {option.label}
@@ -38,24 +41,24 @@ export function ModeSwitch({
 const styles = {
   root: {
     flexShrink: 0,
-    alignSelf: 'flex-start',
+    alignSelf: "flex-start",
     zIndex: 30,
-    display: 'flex',
+    display: "flex",
     gap: 4,
-    margin: 'max(8px, env(safe-area-inset-top)) 12px 4px',
+    margin: "max(8px, env(safe-area-inset-top)) 12px 4px",
     padding: 4,
     borderRadius: 10,
-    background: 'rgba(0,0,0,0.65)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    pointerEvents: 'auto',
+    background: "rgba(0,0,0,0.65)",
+    border: "1px solid rgba(255,255,255,0.15)",
+    pointerEvents: "auto",
   },
   button: {
-    border: 'none',
+    border: "none",
     borderRadius: 8,
-    padding: '8px 14px',
+    padding: "8px 14px",
     fontSize: 13,
     fontWeight: 600,
-    color: '#fff',
-    cursor: 'pointer',
+    color: "#fff",
+    cursor: "pointer",
   },
 } satisfies Record<string, CSSProperties>;

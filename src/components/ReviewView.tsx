@@ -8,6 +8,10 @@ export function ReviewView({
   capture,
   attachedFileName,
   confirmLabel,
+  retakeLabel = 'Repetir toma',
+  hint,
+  busy = false,
+  confirmDisabled = false,
   onRetake,
   onConfirm,
 }: {
@@ -16,6 +20,11 @@ export function ReviewView({
   /** Nombre del PDF adjunto; null si es una imagen. */
   attachedFileName: string | null;
   confirmLabel: string;
+  retakeLabel?: string;
+  /** Aviso bajo el título (error del OCR o intento fallido). */
+  hint?: string | null;
+  busy?: boolean;
+  confirmDisabled?: boolean;
   onRetake: () => void;
   onConfirm: () => void;
 }) {
@@ -25,6 +34,7 @@ export function ReviewView({
   return (
     <div style={styles.root}>
       <h3 style={styles.title}>Revisa tu captura ({title})</h3>
+      {hint ? <p style={styles.hint}>{hint}</p> : null}
       {isPdf ? (
         <div style={styles.pdfPreview}>
           <p style={{ margin: 0, fontSize: 15 }}>📄 PDF adjunto</p>
@@ -38,11 +48,15 @@ export function ReviewView({
         </div>
       )}
       <div style={styles.actions}>
-        <button onClick={onRetake} style={buttonStyles.secondary}>
-          Repetir toma
+        <button onClick={onRetake} style={buttonStyles.secondary} disabled={busy}>
+          {retakeLabel}
         </button>
-        <button onClick={onConfirm} style={buttonStyles.primary}>
-          {confirmLabel}
+        <button
+          onClick={onConfirm}
+          style={{ ...buttonStyles.primary, opacity: busy || confirmDisabled ? 0.55 : 1 }}
+          disabled={busy || confirmDisabled}
+        >
+          {busy ? 'Leyendo…' : confirmLabel}
         </button>
       </div>
     </div>
@@ -66,6 +80,14 @@ const styles = {
     flexShrink: 0,
     margin: '0 0 8px',
     fontSize: 16,
+    textAlign: 'center',
+  },
+  hint: {
+    flexShrink: 0,
+    margin: '0 0 8px',
+    maxWidth: 420,
+    color: COLORS.error,
+    fontSize: 14,
     textAlign: 'center',
   },
   imageWrap: {

@@ -1,8 +1,8 @@
 /**
  * Forma del objeto de verificación (referencia actual; puede cambiar a futuro).
  *
- * Los campos de OCR los llena el motor OCR / backend. Desde el front se envían vacíos
- * junto con las capturas, la ubicación, el dispositivo y la telemetría.
+ * El texto lo devuelve el OCR; el front lo clasifica y llena los campos del documento.
+ * Las capturas, la ubicación, el dispositivo y la telemetría se arman aquí.
  */
 
 export type DocumentoLabel = 'INE' | 'Factura' | 'Comprobante';
@@ -121,13 +121,53 @@ interface VerificationDataBase {
   capturas: CapturasPayload;
 }
 
-/** INE: incluye todos los campos de OCR. */
-export type IneVerificationData = VerificationDataBase & IneOcrData & { Documento: 'INE' };
+/** INE: campos de la credencial más el texto crudo de cada cara. */
+export type IneVerificationData = VerificationDataBase &
+  IneOcrData & {
+    Documento: 'INE';
+    textoOcrFrente: string;
+    textoOcrReverso: string;
+  };
 
-/** Factura / Comprobante: sus campos de OCR se definirán más adelante. */
-export type DocumentVerificationData = VerificationDataBase & {
-  Documento: 'Factura' | 'Comprobante';
-};
+/** Recibo de servicio (CFE, agua, teléfono…). El texto crudo siempre se conserva. */
+export interface ComprobanteOcrData {
+  proveedor: string;
+  nombreTitular: string;
+  direccion: string;
+  calle: string;
+  numeroExterior: string;
+  colonia: string;
+  codigoPostal: string;
+  localidad: string;
+  estado: string;
+  totalAPagar: string;
+  numeroServicio: string;
+  rfcEmisor: string;
+  limitePago: string;
+  periodoFacturado: string;
+  textoOcr: string;
+}
+
+/**
+ * Factura. El ejemplo que se probó no es un CFDI mexicano; estos campos cubren
+ * ese ejemplo y un CFDI (UUID, RFC, folio).
+ */
+export interface FacturaOcrData {
+  tipoComprobante: string;
+  emisor: string;
+  receptor: string;
+  rfcEmisor: string;
+  rfcReceptor: string;
+  numeroFactura: string;
+  fecha: string;
+  total: string;
+  uuid: string;
+  textoOcr: string;
+}
+
+export type DocumentVerificationData =
+  | (VerificationDataBase & ComprobanteOcrData & { Documento: 'Comprobante' })
+  | (VerificationDataBase & FacturaOcrData & { Documento: 'Factura' });
 
 export interface VerificationPayload {
   success: boolean;

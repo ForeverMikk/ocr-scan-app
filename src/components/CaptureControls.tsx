@@ -2,7 +2,7 @@ import type { ChangeEvent, CSSProperties } from 'react';
 import { COLORS } from '../shared/theme';
 import { ShutterButton } from './ShutterButton';
 
-const ACCEPTED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const ACCEPTED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 /** Casilla de opción sobre el obturador. */
 function OptionToggle({
@@ -29,8 +29,9 @@ function OptionToggle({
 
 /**
  * Barra fija abajo, como una app de cámara:
- *  - INE: casilla "Detección automática" (marcada → el obturador se deshabilita).
- *  - Documento: casilla de aplanado y botón para subir imagen/PDF.
+ *  - Identificación: casilla "Detección automática" (marcada → el obturador se deshabilita).
+ *  - Documento: casilla de aplanado.
+ *  - En ambos se puede subir imagen. El OCR no acepta PDF.
  */
 export function CaptureControls({
   isIne,
@@ -58,7 +59,7 @@ export function CaptureControls({
     if (!file) return;
 
     if (!ACCEPTED_UPLOAD_TYPES.includes(file.type)) {
-      alert('Formato no soportado. Sube JPG, PNG, WEBP o PDF.');
+      alert('Formato no soportado. Sube JPG, PNG o WEBP. El OCR no lee PDF.');
       return;
     }
     onFileSelected(file);
@@ -85,17 +86,15 @@ export function CaptureControls({
         <div />
         <ShutterButton onClick={onShutter} disabled={shutterDisabled} />
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-          {!isIne && (
-            <label style={styles.uploadButton}>
-              Subir PDF / Imagen
-              <input
-                type="file"
-                accept={ACCEPTED_UPLOAD_TYPES.join(',')}
-                onChange={handleFileChange}
-                style={{ display: 'none' }}
-              />
-            </label>
-          )}
+          <label style={styles.uploadButton}>
+            Subir imagen
+            <input
+              type="file"
+              accept={ACCEPTED_UPLOAD_TYPES.join(',')}
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+          </label>
         </div>
       </div>
 
