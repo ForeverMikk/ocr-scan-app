@@ -1,9 +1,7 @@
 /**
  * Detector de INE con OpenCV — lógica pura (sin DOM).
  *
- * Funciona igual en el navegador (OpenCV.js global) y en Node (pruebas con fotos reales
- * en `scripts/test-ine-detector.ts`), así los umbrales se calibran con imágenes reales.
- * Por eso este archivo no debe importar nada que toque el DOM ni assets de Vite (`?url`).
+ * Este archivo no importa nada que toque el DOM ni assets de Vite (`?url`).
  *
  * Pipeline:
  *  1. Varias máscaras (2× Canny + Otsu): una sola falla con fondos claros, reflejos o texturas.
@@ -68,7 +66,7 @@ export interface IneAnalysis {
 }
 
 // ---------------------------------------------------------------------------
-// Umbrales (calibrados con dev-fixtures/ine/*; ver scripts/test-ine-detector.ts)
+// Umbrales (calibrados con las fotos de dev-fixtures/ine)
 // ---------------------------------------------------------------------------
 
 /** Proporción ID-1 (85.6 × 54 mm). */

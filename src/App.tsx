@@ -1,10 +1,3 @@
-/**
- * Flujo:
- *   Permiso → foto o archivo → el OCR devuelve texto → aquí se decide el tipo.
- *   INE: frente y luego reverso. Comprobante o factura: una sola imagen.
- *   Cada etapa tiene 3 intentos, sea foto o archivo.
- */
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import type Webcam from "react-webcam";
 import { CameraView } from "./components/CameraView";
@@ -177,8 +170,13 @@ export function App() {
     if (blocked) return;
     const dataUrl = await readFileAsDataUrl(file);
     const side: CaptureSide = step === "reverso" ? "back" : currentSide;
+    const scan = unprocessedScan(dataUrl);
+    const isPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+    if (isPdf) scan.sourceFileName = file.name;
     setScanError(null);
-    setCaptures((prev) => ({ ...prev, [side]: unprocessedScan(dataUrl) }));
+    setCaptures((prev) => ({ ...prev, [side]: scan }));
     setCurrentSide(side);
     setIsReviewing(true);
   };
@@ -365,7 +363,7 @@ export function App() {
         <ReviewView
           title={SIDE_LABEL[currentSide]}
           capture={activeCapture}
-          attachedFileName={null}
+          attachedFileName={activeCapture.sourceFileName ?? null}
           confirmLabel={step === "reverso" ? "Leer reverso" : "Leer documento"}
           retakeLabel={blocked ? "Empezar de nuevo" : "Repetir toma"}
           hint={scanError}
@@ -434,6 +432,7 @@ export function App() {
 
       <CaptureControls
         isIne={isCardFrame}
+        allowPdf={!isCardFrame}
         autoDetect={ineAutoDetect}
         onAutoDetectChange={setIneAutoDetect}
         flatten={flattenDocument}

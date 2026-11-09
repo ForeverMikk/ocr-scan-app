@@ -26,7 +26,7 @@ Validar, en el navegador del teléfono, que podemos:
 ## 2. Librerías: qué se usa y por qué
 
 La base del proyecto (React 18, Vite 8, TypeScript, Node 24, `react-webcam`, `jscanify` y
-OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregaron dos piezas pequeñas.
+OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregó una pieza pequeña.
 
 | Librería | Para qué | Por qué esta |
 | --- | --- | --- |
@@ -36,7 +36,6 @@ OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregaron dos
 | **OpenCV.js** (`@techstark/opencv-js`) | Visión por computadora: bordes, contornos, perspectiva | Es OpenCV compilado a WebAssembly: los mismos algoritmos que en escritorio, corriendo en el teléfono sin servidor |
 | **jscanify** | Aplanar documentos "tipo Office Lens" | Ya resuelve "encuentra la hoja y enderézala" sobre OpenCV; ideal para hojas grandes y claras (comprobantes, facturas) |
 | **@vitejs/plugin-basic-ssl** *(agregada)* | HTTPS en desarrollo | El teléfono **solo** da acceso a la cámara en HTTPS; sin esto no aparecía el permiso |
-| **jpeg-js + pngjs** *(agregadas, solo desarrollo)* | Leer fotos en Node | Para calibrar el detector con fotos reales sin cámara ni navegador (sección 9) |
 
 > **Nota:** jscanify sirve muy bien para documentos, pero para la INE terminó siendo
 > insuficiente. Por eso la INE usa un detector propio escrito directamente con OpenCV
@@ -92,7 +91,8 @@ OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregaron dos
 - **INE:** marco horizontal con la proporción oficial ID-1 (85.6 × 54 mm ≈ 1.586). Si el texto
   es una credencial, después se pide el reverso con el mismo marco.
 - **Doc:** marco vertical y casilla de **aplanado** (jscanify).
-- En los dos modos se puede **subir imagen** (JPG, PNG o WEBP). El OCR no lee PDF.
+- En los dos modos se puede **subir imagen** (JPG, PNG o WEBP). En comprobante y factura
+  también un **PDF**: se pasa a base64 y entra al mismo `POST { image }` que una foto.
 
 ### 5.2 Payload (`payload/`)
 Se adaptó al objeto de referencia del backend:
@@ -275,8 +275,9 @@ y del mismo tamaño siempre: lo ideal para el OCR.
 
 ## 9. Calibración sin cámara
 
-La webcam de la PC no servía para probar, así que la calibración se hizo en **Node** con fotos:
-`npm run test:ine` (`scripts/test-ine-detector.ts`).
+La webcam de la PC no servía para probar, así que la calibración se hizo en **Node** con fotos
+(`scripts/test-ine-detector.ts`). Ese script ya no está en el repo: leía los JPEG y PNG con
+`jpeg-js` y `pngjs`, y la app no las usa. Las imágenes las lee el navegador.
 
 ### 9.1 Cómo funciona
 1. Carga OpenCV en Node y lee las fotos con `jpeg-js`/`pngjs`.
@@ -349,7 +350,7 @@ puntaje es ≥ **0.65**.
 
 ### 9b.1 Qué quedó de esto en la app
 
-El verificador de plantillas sigue en el código y en `npm run test:ine` (32/32 casos), pero **ya
+El verificador de plantillas sigue en el código (en la calibración dio 32/32), pero **ya
 no es la puerta de la captura**. El API de OCR no dice qué documento es: devuelve el texto de
 cualquier imagen. Por eso una licencia o un comprobante tienen que llegar al API, y el tipo se
 decide después (sección 13).
@@ -381,7 +382,7 @@ hoja sigue en `processDocumentShot`.
   - Marcada → el detector trabaja y el obturador queda **deshabilitado**, salvo que haya un error
     visible.
   - Desmarcada → disparo manual. El marco de hoja siempre es manual y muestra la casilla de aplanado.
-- **Obturador** como el de las apps de cámara, y botón **Subir imagen** en los dos modos.
+- **Obturador** como el de las apps de cámara. En INE el botón dice **Subir imagen**; en comprobante y factura, **Subir archivo** (imagen o PDF).
 - Tras la foto, **Revisar**: **Repetir toma** no gasta intento; **Leer documento** o
   **Leer reverso** llama al OCR. Un aviso de error o de “Preparando…” flota sobre la cámara y
   no empuja el marco. Si se agotan los 3 intentos, el botón pasa a **Empezar de nuevo**.
@@ -404,7 +405,6 @@ src/
   payload/      deviceInfo, payloadBuilder, submitVerification (mf-ocr.payload)
   shared/       Utilidades de imagen y colores
   types/        Tipos compartidos, incluido el JSON por documento
-scripts/test-ine-detector.ts    Calibración del detector en Node
 scripts/test-ocr-classify.ts    Clasificación contra lecturas reales del OCR
 ```
 
@@ -513,8 +513,7 @@ La pantalla de resultado muestra un resumen. El JSON completo está en la consol
 - Reactivar la geolocalización para producción móvil.
 - Leer un id inicial desde los query params (`?id=1|2|3`), si hace falta. El tipo final sigue
   saliendo del texto del OCR.
-- Probar en más teléfonos y condiciones de luz. El detector de encuadre se calibra con
-  `npm run test:ine`.
+- Probar en más teléfonos y condiciones de luz.
 - Si hay que aceptar modelos anteriores de credencial en la detección automática, agregar
   plantillas en `src/vision/ine/templates/`. La clasificación por texto no depende de esas
   plantillas.

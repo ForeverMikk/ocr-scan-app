@@ -23,6 +23,8 @@ export interface ScanResult {
   /** Imagen final; igual a `originalDataUrl` si no se transformó o si falló la detección. */
   processedDataUrl: string;
   wasPerspectiveCorrected: boolean;
+  /** Nombre del PDF adjunto. Solo comprobante y factura. */
+  sourceFileName?: string;
 }
 
 export type CaptureMap = Partial<Record<CaptureSide, ScanResult>>;

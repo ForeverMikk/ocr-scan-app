@@ -2,7 +2,10 @@ import type { ChangeEvent, CSSProperties } from 'react';
 import { COLORS } from '../shared/theme';
 import { ShutterButton } from './ShutterButton';
 
-const ACCEPTED_UPLOAD_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+const isPdfFile = (file: File) =>
+  file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
 
 /** Casilla de opción sobre el obturador. */
 function OptionToggle({
@@ -31,10 +34,11 @@ function OptionToggle({
  * Barra fija abajo, como una app de cámara:
  *  - Identificación: casilla "Detección automática" (marcada → el obturador se deshabilita).
  *  - Documento: casilla de aplanado.
- *  - En ambos se puede subir imagen. El OCR no acepta PDF.
+ *  - INE: solo imagen. Comprobante y factura: imagen o PDF.
  */
 export function CaptureControls({
   isIne,
+  allowPdf,
   autoDetect,
   onAutoDetectChange,
   flatten,
@@ -44,6 +48,8 @@ export function CaptureControls({
   onFileSelected,
 }: {
   isIne: boolean;
+  /** PDF solo en comprobante y factura. Se manda en base64 igual que una foto. */
+  allowPdf: boolean;
   autoDetect: boolean;
   onAutoDetectChange: (value: boolean) => void;
   flatten: boolean;
@@ -52,14 +58,25 @@ export function CaptureControls({
   onShutter: () => void;
   onFileSelected: (file: File) => void;
 }) {
+  const accept = allowPdf ? [...IMAGE_TYPES, 'application/pdf', '.pdf'] : IMAGE_TYPES;
+
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // Limpia el input para poder volver a elegir el mismo archivo
     e.target.value = '';
     if (!file) return;
 
-    if (!ACCEPTED_UPLOAD_TYPES.includes(file.type)) {
-      alert('Formato no soportado. Sube JPG, PNG o WEBP. El OCR no lee PDF.');
+    const pdf = isPdfFile(file);
+    if (pdf && !allowPdf) {
+      alert('El PDF solo se puede subir en comprobante o factura.');
+      return;
+    }
+    if (!IMAGE_TYPES.includes(file.type) && !pdf) {
+      alert(
+        allowPdf
+          ? 'Formato no soportado. Sube JPG, PNG, WEBP o PDF.'
+          : 'Formato no soportado. Sube JPG, PNG o WEBP.',
+      );
       return;
     }
     onFileSelected(file);
@@ -87,10 +104,10 @@ export function CaptureControls({
         <ShutterButton onClick={onShutter} disabled={shutterDisabled} />
         <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
           <label style={styles.uploadButton}>
-            Subir imagen
+            {allowPdf ? 'Subir archivo' : 'Subir imagen'}
             <input
               type="file"
-              accept={ACCEPTED_UPLOAD_TYPES.join(',')}
+              accept={accept.join(',')}
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />

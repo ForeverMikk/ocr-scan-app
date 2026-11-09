@@ -10,7 +10,7 @@
  * su posición esperada (correlación normalizada); el puntaje es la mediana de las zonas.
  * Se prueban frente/reverso y la tarjeta girada 180° (INE de cabeza).
  *
- * Lógica pura (sin DOM): la usa el navegador y el script de calibración en Node.
+ * Lógica pura (sin DOM).
  */
 
 import type { Cv, CvMat, IneSide } from './ineCardDetector';
@@ -20,7 +20,7 @@ export const VERIFY_WIDTH = 640;
 export const VERIFY_HEIGHT = 404;
 
 /**
- * Mediana mínima para aceptar que es una INE. Calibración (scripts/test-ine-detector.ts):
+ * Mediana mínima para aceptar que es una INE. En la calibración con fotos reales:
  * INE real ≈ 0.83, licencia ≤ 0.34, tarjeta del metro ≤ 0.28, peor caso no-INE 0.51.
  */
 export const INE_MATCH_MIN = 0.65;
