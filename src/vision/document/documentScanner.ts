@@ -1,7 +1,7 @@
 /**
  * Aplanado de documentos tipo Office Lens (Comprobante / Factura).
  *
- * jscanify.extractPaper sobre el recorte del marco estira cualquier contorno interno
+ * Buscar la hoja solo dentro del recorte justo del marco estira cualquier contorno interno
  * (efecto "cortina"): al recortar, los bordes de la hoja quedan pegados al límite y
  * Canny no los ve. Aquí se busca la hoja en un recorte CON margen, se valida que el
  * rectángulo parezca papel, y si no hay uno claro se deja el recorte del marco.

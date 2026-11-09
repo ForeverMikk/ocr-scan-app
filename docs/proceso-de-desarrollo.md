@@ -25,40 +25,31 @@ Validar, en el navegador del teléfono, que podemos:
 
 ## 2. Librerías: qué se usa y por qué
 
-La base del proyecto (React 18, Vite 8, TypeScript, Node 24, `react-webcam`, `jscanify` y
-OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregó una pieza pequeña.
+La base del proyecto (React 18, Vite 8, TypeScript, Node 24, `react-webcam` y OpenCV.js)
+ya venía definida al iniciar. Durante el desarrollo se agregó una pieza pequeña.
 
 | Librería | Para qué | Por qué esta |
 | --- | --- | --- |
 | **React 18 + TypeScript** | Interfaz y estado del flujo | Estándar del equipo; TypeScript estricto evita errores en el payload y en la geometría |
 | **Vite 8** | Servidor de desarrollo y build | Arranque instantáneo y recarga en caliente; permite importar archivos como URL (`?url`), clave para cargar OpenCV |
 | **react-webcam** | Mostrar el video de la cámara y tomar la foto (`getScreenshot`) | Envuelve `getUserMedia` con un componente simple y da acceso al `<video>` real para analizarlo cuadro por cuadro |
-| **OpenCV.js** (`@techstark/opencv-js`) | Visión por computadora: bordes, contornos, perspectiva | Es OpenCV compilado a WebAssembly: los mismos algoritmos que en escritorio, corriendo en el teléfono sin servidor |
-| **jscanify** | Aplanar documentos "tipo Office Lens" | Ya resuelve "encuentra la hoja y enderézala" sobre OpenCV; ideal para hojas grandes y claras (comprobantes, facturas) |
+| **OpenCV.js** (`@techstark/opencv-js`) | Visión por computadora: bordes, contornos, perspectiva y aplanado de la hoja | Es OpenCV compilado a WebAssembly: los mismos algoritmos que en escritorio, corriendo en el teléfono sin servidor |
 | **@vitejs/plugin-basic-ssl** *(agregada)* | HTTPS en desarrollo | El teléfono **solo** da acceso a la cámara en HTTPS; sin esto no aparecía el permiso |
 
-> **Nota:** jscanify sirve muy bien para documentos, pero para la INE terminó siendo
-> insuficiente. Por eso la INE usa un detector propio escrito directamente con OpenCV
-> (secciones 7 y 8).
+> **Nota:** la INE y el aplanado de comprobantes usan un detector propio escrito
+> directamente con OpenCV (secciones 7 y 8, y `vision/document/documentScanner.ts`).
 
 ---
 
 ## 3. Primeros pasos: que la cámara funcione
 
-### 3.1 jscanify no cargaba (resolución de módulos)
-- **Problema:** Vite fallaba con `'./client/client' is not exported…`. Un alias
-  `jscanify → jscanify/client` se aplicaba dos veces.
-- **Solución:** un pequeño plugin en `vite.config.ts` (`jscanifyBrowserResolve`) que apunta
-  directo al archivo de navegador `node_modules/jscanify/src/jscanify.js`, y excluir jscanify
-  del pre-empaquetado de Vite.
-
-### 3.2 El permiso de cámara no aparecía en el teléfono
+### 3.1 El permiso de cámara no aparecía en el teléfono
 - **Problema:** abriendo `http://IP-de-la-PC:3015`, el teléfono no mostraba ningún popup.
   Los navegadores solo permiten cámara y GPS en **contexto seguro** (HTTPS o `localhost`).
 - **Solución:** `@vitejs/plugin-basic-ssl` para servir en HTTPS con un certificado de desarrollo.
   La app además detecta si no está en contexto seguro y lo explica en pantalla.
 
-### 3.3 La geolocalización bloqueaba todo en PC
+### 3.2 La geolocalización bloqueaba todo en PC
 - **Problema:** `GeolocationPositionError code 3 (Timeout)`. En PC no hay GPS y el flujo se
   quedaba atorado.
 - **Solución:** primero un reintento con baja precisión; después, a petición, la geolocalización
@@ -76,7 +67,7 @@ OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregó una p
 - **Solución (`vision/guideFrame/guideFrameGeometry.ts`):**
   1. Se calcula a qué tamaño se está pintando realmente el video y cuánto sobresale.
   2. Se traduce el rectángulo del marco (pantalla) a píxeles del video.
-  3. Opcionalmente se agrega un **margen** alrededor del marco (se usa en la INE, ver 7.2).
+  3. Opcionalmente se agrega un **margen** alrededor del marco (se usa en la INE, ver 7.1).
 
   `cropToGuideFrame.ts` usa ese mapeo para recortar la foto en un canvas.
 
@@ -90,7 +81,7 @@ OpenCV.js) ya venía definida al iniciar. Durante el desarrollo se agregó una p
 - El catálogo `DOCUMENT_CATALOG` conserva los ids `1 = INE`, `2 = Comprobante`, `3 = Factura`.
 - **INE:** marco horizontal con la proporción oficial ID-1 (85.6 × 54 mm ≈ 1.586). Si el texto
   es una credencial, después se pide el reverso con el mismo marco.
-- **Doc:** marco vertical y casilla de **aplanado** (jscanify).
+- **Doc:** marco vertical y casilla de **aplanado** (OpenCV, `documentScanner.ts`).
 - En los dos modos se puede **subir imagen** (JPG, PNG o WEBP). En comprobante y factura
   también un **PDF**: se pasa a base64 y entra al mismo `POST { image }` que una foto.
 
@@ -122,7 +113,7 @@ Se adaptó al objeto de referencia del backend:
 
 ---
 
-## 6. Cargar OpenCV y jscanify en el navegador (la parte "rara")
+## 6. Cargar OpenCV en el navegador (la parte "rara")
 
 Antes de detectar nada hubo que lograr que OpenCV cargara de forma confiable.
 
@@ -138,25 +129,15 @@ Antes de detectar nada hubo que lograr que OpenCV cargara de forma confiable.
 > Esta misma trampa reapareció en el script de calibración (sección 9) y se resolvió igual:
 > nunca devolver `cv` desde una función `async`.
 
-### 6.2 jscanify fallaba en silencio
-- **Problema:** `Cannot set properties of undefined (setting 'jscanify')`. jscanify es un
-  paquete **UMD** antiguo que se registra en `this`; como módulo moderno, `this` no existe.
-  El aplanado de documentos fallaba sin avisar.
-- **Solución (`vision/loaders/jscanifyLoader.ts`):** también se carga como `<script>`, después de
-  OpenCV, y se lee del objeto global `window.jscanify`.
-
 ---
 
-## 7. Detector de INE, versión 1 (jscanify) y lo que enseñó
+## 7. Detector de INE, versión 1 (contorno más grande) y lo que enseñó
 
-La primera versión usaba jscanify para encontrar la tarjeta en el video ~4 veces por segundo y
-evaluaba si encajaba en el marco (marco **verde** si está bien, **rojo** con aviso si no).
+La primera versión buscaba bordes y se quedaba con el contorno más grande para encontrar la
+tarjeta en el video ~4 veces por segundo, y evaluaba si encajaba en el marco (marco **verde**
+si está bien, **rojo** con aviso si no). De ese contorno sacaba 4 esquinas.
 
-### 7.1 Cómo funciona jscanify por dentro
-Busca bordes (Canny), umbraliza y se queda con **el contorno más grande** de la imagen. De ahí
-saca 4 esquinas.
-
-### 7.2 Problemas encontrados en el teléfono y sus correcciones
+### 7.1 Problemas encontrados en el teléfono y sus correcciones
 | Síntoma | Causa | Corrección |
 | --- | --- | --- |
 | Decía "Aleja la INE" aunque llenaba el marco | Se analizaba solo el interior del marco: los bordes de la tarjeta quedaban pegados al límite de la imagen y OpenCV no los veía | Analizar el marco **+ 15% de margen** (`INE_DETECTION_PAD_RATIO`) y evaluar la tarjeta relativa al marco |
@@ -164,7 +145,7 @@ saca 4 esquinas.
 | Pedía encuadre casi perfecto | Criterios demasiado estrictos | Basta **≥ 90 %** de la tarjeta dentro del marco y que cubra **≥ 60 %** del marco |
 | En PC todo borroso y no detectaba | Webcam de baja calidad | Se dejó temporalmente la INE con disparo manual |
 
-### 7.3 Por qué no bastaba
+### 7.2 Por qué no bastaba
 "El contorno más grande" falla seguido con la INE:
 - Los **bloques QR** del reverso o la **foto** del frente pueden formar contornos más fuertes que
   el borde de la tarjeta.
@@ -405,7 +386,7 @@ src/
   payload/      deviceInfo, payloadBuilder, submitVerification (mf-ocr.payload)
   shared/       Utilidades de imagen y colores
   types/        Tipos compartidos, incluido el JSON por documento
-scripts/test-ocr-classify.ts    Clasificación contra lecturas reales del OCR
+scripts/test-ocr-classify.ts    Clasificación contra textos de ejemplo
 ```
 
 ---
@@ -414,12 +395,10 @@ scripts/test-ocr-classify.ts    Clasificación contra lecturas reales del OCR
 
 | Problema | Solución |
 | --- | --- |
-| jscanify no resolvía en Vite | Plugin que apunta al archivo de navegador |
 | Sin permiso de cámara en el teléfono | HTTPS en desarrollo (basic-ssl) |
 | Timeout de GPS en PC | Geolocalización comentada; payload con `gpsData: null` |
 | Foto completa en lugar del marco | Mapeo pantalla → video compensando `object-fit: cover` |
 | OpenCV nunca terminaba de cargar | `<script>` + sondeo de `cv.Mat`; nunca resolver promesas con `cv` |
-| jscanify fallaba en silencio | Cargarlo como `<script>` global |
 | "Aleja la INE" con la tarjeta bien puesta | Analizar marco + 15 % de margen |
 | Marco se movía con los avisos | Posición absoluta anclada al centro |
 | Detección poco confiable (QR, fondos claros, sombras) | Detector propio: 4 máscaras, filtro de rectángulos, puntaje por proporción y marco |

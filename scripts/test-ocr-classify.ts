@@ -1,73 +1,61 @@
 /**
- * Comprueba la clasificación contra las lecturas reales del OCR.
+ * Comprueba la clasificación contra textos de ejemplo (no son documentos reales).
  *   npx esbuild scripts/test-ocr-classify.ts --bundle --platform=node --format=esm --outfile=dev-fixtures/out/test-ocr.mjs && node dev-fixtures/out/test-ocr.mjs
  */
 
 import { classifyOcrText, mergeIneReads } from '../src/ocr/classifyDocument';
 import { decideCapture } from '../src/flow/decideCapture';
 
-const INE_FRONT = `& UNIDOS *
-INSTITUTO NACIONAL ELECTORAL
+const INE_FRONT = `INSTITUTO NACIONAL ELECTORAL
 MEXICO
 CREDENCIAL PARA VOTAR
 NOMBRE
 SEXO H
-MOLINA
-PEREZ
-MICHAEL
+GARCIA
+LOPEZ
+ANDRES
 DOMICILIO
-AV 5 DE MAYO S/N
-PBLO SAN BARTOLO CUAUTLALPAN 55630
-ZUMPANGO, MEX.
-CLAVE DE ELECTOR MLPRMC97060615H500
+AV REFORMA S/N
+PBLO CENTRO 01000
+BENITO JUAREZ, CDMX
+CLAVE DE ELECTOR GALXAN80010101H000
 CURP
 ANO DE REGISTRO
-My
-MOPM970606HMCLRC01
+GALP800101HDFRZN09
 2015 02
 FECHA DE NACIMIENTO SECCION VIGENCIA
-06/06/1997
-5902
+01/01/1980
+1234
 2023 - 2033`;
 
-const INE_BACK = `RONER
-24
-INE
-C003422
-MIGUES ANGEL PATISO ARROYO
-ENCARGADO DEL DESPACHO DE
-LA SECRE ARA E/ECUTIVA DEL
+const INE_BACK = `INE
 INSTITUTO NACIONAL ELECTORAL
-IDMEX2481262753<<5902103244917
-9706062H3312315MEX<02<<16074<7
-MOLINA<PEREZ<<MICHAEL<<<<<<<<<`;
+IDMEX1234567890<<1234101234567
+8001012H3312315MEX<02<<00000<0
+GARCIA<LOPEZ<<ANDRES<<<<<<<<<<`;
 
 const LICENSE = `ESTADOS UNIDOS MEXICANOS
-GOBIERNO DE LA CIUDAD DE MEXICO
-SECRETARIA DE MOVILIDAD
 LICENCIA PARA CONDUCIR
-MICHAEL MOLINA PEREZ
-CURP
-MOPM970606HMCLRC01
+ANDRES GARCIA LOPEZ
 VIGENCIA
 PERMANENTE`;
 
 const CFE = `CFE
 Comisión Federal de Electricidad
 TOTAL A PAGAR:
-PEREZ GARCIA DELIA PIEDAD
-CALLEJON SIN NOMBRE 9 CP.55630
-$749
-SAN BARTOLO CUAUTLALPAN. C.P. 55630
-(SETECIENTOS CUARENTA Y NUEVE PESOS
-SAN BARTOLO CUAUTLAL MEX.
+LOPEZ RUIZ ANA
+CALLE FALSA 123 CP.01000
+$100
+CENTRO. C.P. 01000
+(CIEN PESOS
+BENITO JUAREZ CDMX.
 M.N.)
-NO. DE SERVICIO : 568160802924
+NO. DE SERVICIO : 000000000001
 RFC: CFE370814QI0
-LÍMITE DE PAGO: 07 AGO 2026
-PERIODO FACTURADO: 18 MAY 26 20 JUL 26
+LÍMITE DE PAGO: 01 ENE 2026
+PERIODO FACTURADO: 01 ENE 26 01 FEB 26
 Total
-$749.66`;
+$100.00`;
 
 const FACTURA = `Factura de abono
 Datos del cliente
@@ -102,16 +90,16 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
 const front = classifyOcrText(INE_FRONT);
 check('frente es INE', front.kind === 'ine-frente', front.kind);
 if (front.kind === 'ine-frente') {
-  check('nombres', front.ine.nombres === 'MICHAEL', front.ine.nombres);
-  check('paterno', front.ine.apellidoPaterno === 'MOLINA', front.ine);
-  check('materno', front.ine.apellidoMaterno === 'PEREZ');
-  check('curp', front.ine.curp === 'MOPM970606HMCLRC01', front.ine.curp);
-  check('clave', front.ine.claveElector === 'MLPRMC97060615H500');
+  check('nombres', front.ine.nombres === 'ANDRES', front.ine.nombres);
+  check('paterno', front.ine.apellidoPaterno === 'GARCIA', front.ine);
+  check('materno', front.ine.apellidoMaterno === 'LOPEZ');
+  check('curp', front.ine.curp === 'GALP800101HDFRZN09', front.ine.curp);
+  check('clave', front.ine.claveElector === 'GALXAN80010101H000');
   check('sexo', front.ine.sexo === 'H');
-  check('cp', front.ine.codigoPostal === '55630', front.ine.codigoPostal);
-  check('municipio', front.ine.municipio === 'ZUMPANGO', front.ine.municipio);
-  check('calle', front.ine.calle === 'AV 5 DE MAYO', front.ine.calle);
-  check('nacimiento', front.ine.fechaNacimiento === '06/06/1997');
+  check('cp', front.ine.codigoPostal === '01000', front.ine.codigoPostal);
+  check('municipio', front.ine.municipio === 'BENITO JUAREZ', front.ine.municipio);
+  check('calle', front.ine.calle === 'AV REFORMA', front.ine.calle);
+  check('nacimiento', front.ine.fechaNacimiento === '01/01/1980');
   check('vigencia', front.ine.fechaExpiracion === '2023-2033', front.ine.fechaExpiracion);
   check('registro', front.ine.annoRegistro === '2015' && front.ine.numeroEmision === '02', front.ine);
 }
@@ -119,12 +107,12 @@ if (front.kind === 'ine-frente') {
 const back = classifyOcrText(INE_BACK);
 check('reverso es INE', back.kind === 'ine-reverso', back.kind);
 if (front.kind === 'ine-frente' && back.kind === 'ine-reverso') {
-  check('cic', back.back.cic === '2481262753', back.back.cic);
-  check('mrz', back.back.mrz.includes('IDMEX2481262753'));
+  check('cic', back.back.cic === '1234567890', back.back.cic);
+  check('mrz', back.back.mrz.includes('IDMEX1234567890'));
   const merged = mergeIneReads(front.ine, back.back);
-  check('merge cic', merged.cic === '2481262753');
+  check('merge cic', merged.cic === '1234567890');
   check('merge no pisa vigencia', merged.fechaExpiracion === '2023-2033', merged.fechaExpiracion);
-  check('merge nacimiento mrz si faltara', back.back.complemento.fechaNacimiento === '06/06/1997', back.back.complemento);
+  check('merge nacimiento mrz si faltara', back.back.complemento.fechaNacimiento === '01/01/1980', back.back.complemento);
   check('merge expiry mrz', back.back.complemento.fechaExpiracion === '31/12/2033', back.back.complemento.fechaExpiracion);
 }
 
@@ -135,13 +123,13 @@ const cfe = classifyOcrText(CFE);
 check('cfe es comprobante', cfe.kind === 'comprobante', cfe.kind);
 if (cfe.kind === 'comprobante') {
   check('proveedor', cfe.data.proveedor === 'CFE');
-  check('titular', cfe.data.nombreTitular === 'PEREZ GARCIA DELIA PIEDAD', cfe.data.nombreTitular);
-  check('servicio', cfe.data.numeroServicio === '568160802924', cfe.data.numeroServicio);
-  check('total', cfe.data.totalAPagar === '749.66', cfe.data.totalAPagar);
+  check('titular', cfe.data.nombreTitular === 'LOPEZ RUIZ ANA', cfe.data.nombreTitular);
+  check('servicio', cfe.data.numeroServicio === '000000000001', cfe.data.numeroServicio);
+  check('total', cfe.data.totalAPagar === '100.00', cfe.data.totalAPagar);
   check('rfc', cfe.data.rfcEmisor === 'CFE370814QI0', cfe.data.rfcEmisor);
-  check('limite', cfe.data.limitePago === '07 AGO 2026', cfe.data.limitePago);
-  check('numero exterior', cfe.data.numeroExterior === '9', cfe.data);
-  check('localidad', cfe.data.localidad === 'SAN BARTOLO CUAUTLALPAN', cfe.data.localidad);
+  check('limite', cfe.data.limitePago === '01 ENE 2026', cfe.data.limitePago);
+  check('numero exterior', cfe.data.numeroExterior === '123', cfe.data);
+  check('localidad', cfe.data.localidad === 'CENTRO', cfe.data.localidad);
 }
 
 const factura = classifyOcrText(FACTURA);
